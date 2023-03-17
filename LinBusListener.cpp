@@ -189,11 +189,11 @@ void LinBusListener::read_lin_frame_() {
 
       // First is Break expected
       if (!this->read_byte(&buf) || buf != LIN_BREAK) {
-#ifdef ESPHOME_LOG_HAS_VERY_VERBOSE
+      #ifdef ESPHOME_LOG_HAS_VERY_VERBOSE
         log_msg.type = QUEUE_LOG_MSG_TYPE::VV_READ_LIN_FRAME_BREAK_EXPECTED;
         log_msg.current_PID = buf;
         xQueueSendFromISR(this->log_queue_, (void *) &log_msg, QUEUE_WAIT_DONT_BLOCK);
-#endif  // ESPHOME_LOG_HAS_VERY_VERBOSE
+      #endif  // ESPHOME_LOG_HAS_VERY_VERBOSE
       } else {
         // ESP_LOGVV(TAG, "%02X BREAK received.", buf);
         this->current_state_ = READ_STATE_SYNC;

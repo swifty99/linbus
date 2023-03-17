@@ -2,6 +2,7 @@
 /**
  * @brief Connects to UART and answers LIN PID requests on time if available
  * 
+ * bool observer_mode_ could be enabled
  */
 #pragma once
 

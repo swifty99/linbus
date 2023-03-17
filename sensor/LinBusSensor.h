@@ -1,13 +1,13 @@
 #pragma once
 
 #include "esphome/components/sensor/sensor.h"
-#include "esphome/components/truma_inetbox/LinBus.h"
+#include "esphome/components/linbus/LinBus.h"
 
 namespace esphome {
-namespace truma_inetbox {
+namespace linbus {
 
 
-class TrumaSensor : public Component, public sensor::Sensor, public Parented<LinBus> {
+class LinSensor : public Component, public sensor::Sensor, public Parented<LinBus> {
  public:
   void setup() override;
   void dump_config() override;
@@ -17,5 +17,5 @@ class TrumaSensor : public Component, public sensor::Sensor, public Parented<Lin
 
  private:
 };
-}  // namespace truma_inetbox
+}  // namespace linbus
 }  // namespace esphome

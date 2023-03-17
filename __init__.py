@@ -14,6 +14,7 @@ from esphome.const import (
     CONF_TX_PIN,
     CONF_INVERTED,
     CONF_CS_PIN,
+    CONF_VALUE_TYPE,
 )
 from esphome.components.uart import (
     CONF_STOP_BITS,
@@ -27,26 +28,32 @@ from .entity_helpers import count_id_usage
 DEPENDENCIES = ["uart"]
 CODEOWNERS = ["@Fabian-Schmidt"]
 
+#AUTO_LOAD = ["linbus"]
+#MULTI_CONF = True
+
 CONF_TRUMA_INETBOX_ID = "truma_inetbox_id"
+CONF_LINBUS_ID = "linbus_id"
+
 CONF_LIN_CHECKSUM = "lin_checksum"
 CONF_FAULT_PIN = "fault_pin"
 CONF_OBSERVER_MODE = "observer_mode"
 CONF_NUMBER_OF_CHILDREN = "number_of_children"
 CONF_ON_HEATER_MESSAGE = "on_heater_message"
+CONF_VALUE_TYPE = "value_type"
 
-truma_inetbox_ns = cg.esphome_ns.namespace("truma_inetbox")
-StatusFrameHeater = truma_inetbox_ns.struct("StatusFrameHeater")
+linbus_ns = cg.esphome_ns.namespace("truma_inetbox")
+StatusFrameHeater = linbus_ns.struct("StatusFrameHeater")
 StatusFrameHeaterConstPtr = StatusFrameHeater.operator("ptr").operator("const")
-TrumaINetBoxApp = truma_inetbox_ns.class_(
-    "TrumaiNetBoxApp", cg.PollingComponent, uart.UARTDevice
+LinBus = linbus_ns.class_(
+    "LinBus", cg.PollingComponent, uart.UARTDevice
 )
-TrumaiNetBoxAppHeaterMessageTrigger = truma_inetbox_ns.class_(
-    "TrumaiNetBoxAppHeaterMessageTrigger",
+LinBusHeaterMessageTrigger = linbus_ns.class_(
+    "LinBusHeaterMessageTrigger",
     automation.Trigger.template(StatusFrameHeaterConstPtr),
 )
 
 # `LIN_CHECKSUM` is a enum class and not a namespace but it works.
-LIN_CHECKSUM_dummy_ns = truma_inetbox_ns.namespace("LIN_CHECKSUM")
+LIN_CHECKSUM_dummy_ns = linbus_ns.namespace("LIN_CHECKSUM")
 
 CONF_SUPPORTED_LIN_CHECKSUM = {
     "VERSION_1": LIN_CHECKSUM_dummy_ns.LIN_CHECKSUM_VERSION_1,
@@ -83,6 +90,23 @@ CONF_RP2040_HARDWARE_UART = {
     }
 }
 
+SensorValueType_ns = linbus_ns.namespace("SensorValueType")
+SensorValueType = SensorValueType_ns.enum("SensorValueType")
+SENSOR_VALUE_TYPE = {
+    "RAW": SensorValueType.RAW,
+    "U_WORD": SensorValueType.U_WORD,
+    "S_WORD": SensorValueType.S_WORD,
+    "U_DWORD": SensorValueType.U_DWORD,
+    "U_DWORD_R": SensorValueType.U_DWORD_R,
+    "S_DWORD": SensorValueType.S_DWORD,
+    "S_DWORD_R": SensorValueType.S_DWORD_R,
+    "U_QWORD": SensorValueType.U_QWORD,
+    "U_QWORD_R": SensorValueType.U_QWORD_R,
+    "S_QWORD": SensorValueType.S_QWORD,
+    "S_QWORD_R": SensorValueType.S_QWORD_R,
+    "FP32": SensorValueType.FP32,
+    "FP32_R": SensorValueType.FP32_R,
+}
 
 def final_validate_device_schema(
     name: str,
@@ -199,14 +223,14 @@ def final_validate_device_schema(
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.GenerateID(): cv.declare_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.declare_id(LinBus),
             cv.Optional(CONF_LIN_CHECKSUM, "VERSION_2"): cv.enum(CONF_SUPPORTED_LIN_CHECKSUM, upper=True),
             cv.Optional(CONF_CS_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_FAULT_PIN): pins.gpio_input_pin_schema,
             cv.Optional(CONF_OBSERVER_MODE): cv.boolean,
             cv.Optional(CONF_ON_HEATER_MESSAGE): automation.validate_automation(
                 {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(TrumaiNetBoxAppHeaterMessageTrigger),
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(LinBusHeaterMessageTrigger),
                 }
             ),
         }
@@ -221,7 +245,7 @@ FINAL_VALIDATE_SCHEMA = cv.All(
     final_validate_device_schema(
         "linbus", baud_rate=9600, require_tx=True, require_rx=True, stop_bits=2, data_bits=8, parity="NONE", require_hardware_uart=True),
     count_id_usage(CONF_NUMBER_OF_CHILDREN, [
-                   CONF_TRUMA_INETBOX_ID, CONF_ID], TrumaINetBoxApp),
+                   CONF_TRUMA_INETBOX_ID, CONF_ID], LinBus),
 )
 
 async def to_code(config):
@@ -267,24 +291,24 @@ CONF_START = "start"
 CONF_ROOM_TEMPERATURE = "room_temperature"
 CONF_WATER_TEMPERATURE = "water_temperature"
 
-HeaterRoomTempAction = truma_inetbox_ns.class_(
+HeaterRoomTempAction = linbus_ns.class_(
     "HeaterRoomTempAction", automation.Action)
-HeaterWaterTempAction = truma_inetbox_ns.class_(
+HeaterWaterTempAction = linbus_ns.class_(
     "HeaterWaterTempAction", automation.Action)
-HeaterWaterTempEnumAction = truma_inetbox_ns.class_(
+HeaterWaterTempEnumAction = linbus_ns.class_(
     "HeaterWaterTempEnumAction", automation.Action)
-HeaterElecPowerLevelAction = truma_inetbox_ns.class_(
+HeaterElecPowerLevelAction = linbus_ns.class_(
     "HeaterElecPowerLevelAction", automation.Action)
-HeaterEnergyMixAction = truma_inetbox_ns.class_(
+HeaterEnergyMixAction = linbus_ns.class_(
     "HeaterEnergyMixAction", automation.Action)
-TimerDisableAction = truma_inetbox_ns.class_(
+TimerDisableAction = linbus_ns.class_(
     "TimerDisableAction", automation.Action)
-TimerActivateAction = truma_inetbox_ns.class_(
+TimerActivateAction = linbus_ns.class_(
     "TimerActivateAction", automation.Action)
-WriteTimeAction = truma_inetbox_ns.class_("WriteTimeAction", automation.Action)
+WriteTimeAction = linbus_ns.class_("WriteTimeAction", automation.Action)
 
 # `EnergyMix` is a enum class and not a namespace but it works.
-EnergyMix_dummy_ns = truma_inetbox_ns.namespace("EnergyMix")
+EnergyMix_dummy_ns = linbus_ns.namespace("EnergyMix")
 
 CONF_SUPPORTED_ENERGY_MIX = {
     "NONE": EnergyMix_dummy_ns.ENERGY_MIX_NONE,
@@ -294,7 +318,7 @@ CONF_SUPPORTED_ENERGY_MIX = {
 }
 
 # `ElectricPowerLevel` is a enum class and not a namespace but it works.
-ElectricPowerLevel_dummy_ns = truma_inetbox_ns.namespace("ElectricPowerLevel")
+ElectricPowerLevel_dummy_ns = linbus_ns.namespace("ElectricPowerLevel")
 
 CONF_SUPPORTED_ELECTRIC_POWER_LEVEL = {
     "0": ElectricPowerLevel_dummy_ns.ELECTRIC_POWER_LEVEL_0,
@@ -313,7 +337,7 @@ CONF_SUPPORTED_ELECTRIC_POWER_LEVEL = {
 }
 
 # `HeatingMode` is a enum class and not a namespace but it works.
-HeatingMode_dummy_ns = truma_inetbox_ns.namespace("HeatingMode")
+HeatingMode_dummy_ns = linbus_ns.namespace("HeatingMode")
 
 CONF_SUPPORTED_HEATING_MODE = {
     "OFF": HeatingMode_dummy_ns.HEATING_MODE_OFF,
@@ -325,7 +349,7 @@ CONF_SUPPORTED_HEATING_MODE = {
 }
 
 # `TargetTemp` is a enum class and not a namespace but it works.
-TargetTemp_dummy_ns = truma_inetbox_ns.namespace("TargetTemp")
+TargetTemp_dummy_ns = linbus_ns.namespace("TargetTemp")
 
 CONF_SUPPORTED_WATER_TEMPERATURE = {
     "OFF": TargetTemp_dummy_ns.TARGET_TEMP_OFF,
@@ -341,7 +365,7 @@ CONF_SUPPORTED_WATER_TEMPERATURE = {
     automation.maybe_conf(
         CONF_TEMPERATURE,
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
             cv.Required(CONF_TEMPERATURE): cv.templatable(cv.int_range(min=0, max=30)),
             cv.Optional(CONF_HEATING_MODE, "OFF"): cv.templatable(cv.enum(CONF_SUPPORTED_HEATING_MODE, upper=True)),
         }
@@ -366,7 +390,7 @@ async def truma_inetbox_heater_set_target_room_temperature_to_code(config, actio
     automation.maybe_conf(
         CONF_TEMPERATURE,
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
             cv.Required(CONF_TEMPERATURE): cv.templatable(cv.int_range(min=0, max=80)),
         }
     ),
@@ -387,7 +411,7 @@ async def truma_inetbox_heater_set_target_water_temperature_to_code(config, acti
     automation.maybe_conf(
         CONF_TEMPERATURE,
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
             cv.Required(CONF_TEMPERATURE): cv.templatable(cv.enum(CONF_SUPPORTED_WATER_TEMPERATURE, upper=True))
         }
     ),
@@ -408,7 +432,7 @@ async def truma_inetbox_heater_set_target_water_temperature_enum_to_code(config,
     automation.maybe_conf(
         CONF_WATT,
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
             cv.Required(CONF_WATT): cv.templatable(cv.int_range(min=0, max=1800))
         }
     ),
@@ -428,7 +452,7 @@ async def truma_inetbox_heater_set_electric_power_level_to_code(config, action_i
     HeaterEnergyMixAction,
     cv.Schema(
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
             cv.Required(CONF_ENERGY_MIX): cv.templatable(cv.enum(CONF_SUPPORTED_ENERGY_MIX, upper=True)),
             cv.Optional(CONF_WATT, 0): cv.templatable(cv.enum(CONF_SUPPORTED_ELECTRIC_POWER_LEVEL, upper=True)),
         }
@@ -452,7 +476,7 @@ async def truma_inetbox_heater_set_energy_mix_level_to_code(config, action_id, t
     TimerDisableAction,
     automation.maybe_simple_id(
         {
-            cv.GenerateID(): cv.use_id(TrumaINetBoxApp),
+            cv.GenerateID(): cv.use_id(LinBus),
         }
     ),
 )
