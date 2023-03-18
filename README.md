@@ -44,7 +44,8 @@ While the receive on frame is set, the master initiates communication_
 
 To receive a PID as master the PID will be put on the bus, the slave will follow to answer:
 
-```on_...:
+```
+on_...:
   - linbus.request_pid: 0x33
 ```
 
