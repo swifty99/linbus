@@ -2,17 +2,17 @@
 #include "LinBusListener.h"
 #include "esphome/core/log.h"
 #include "soc/uart_reg.h"
-#include "esphome/components/uart/truma_uart_component_esp_idf.h"
+#include "esphome/components/uart/linbus_uart_component_esp_idf.h"
 #include "esphome/components/uart/uart_component_esp_idf.h"
 
 namespace esphome {
 namespace lin_bus {
 
-static const char *const TAG = "truma_inetbox.LinBusListener";
+static const char *const TAG = "linbus_inetbox.LinBusListener";
 
 void LinBusListener::setup_framework() {
   // uartSetFastReading
-  auto uartComp = static_cast<uart::truma_IDFUARTComponent *>(this->parent_);
+  auto uartComp = static_cast<uart::linbus_IDFUARTComponent *>(this->parent_);
 
   auto uart_num = uartComp->get_hw_serial_number();
 
@@ -58,7 +58,7 @@ void LinBusListener::setup_framework() {
 
 void LinBusListener::uartEventTask_(void *args) {
   LinBusListener *instance = (LinBusListener *) args;
-  auto uartComp = static_cast<uart::truma_IDFUARTComponent *>(instance->parent_);
+  auto uartComp = static_cast<uart::linbus_IDFUARTComponent *>(instance->parent_);
   auto uart_num = uartComp->get_hw_serial_number();
   auto uartEventQueue = uartComp->get_uart_event_queue();
   uart_event_t event;

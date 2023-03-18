@@ -4,9 +4,9 @@
 #include "esphome/core/helpers.h"
 
 namespace esphome {
-namespace truma_inetbox {
+namespace linbus_inetbox {
 
-static const char *const TAG = "truma_inetbox.LinBusProtocol";
+static const char *const TAG = "linbus_inetbox.LinBusProtocol";
 
 #define DIAGNOSTIC_FRAME_MASTER 0x3c
 #define DIAGNOSTIC_FRAME_SLAVE 0x3d
@@ -24,6 +24,17 @@ void LinBusProtocol::lin_reset_device(){
   while (!this->updates_to_send_.empty()) {
     this->updates_to_send_.pop();
   }
+}
+
+
+bool LinBusProtocol::lin_request_pid(const u_int8_t pid){
+
+  // return if Bus error, not yet implemented
+  // return true if PID could be sent
+
+
+
+
 }
 
 bool LinBusProtocol::answer_lin_order_(const u_int8_t pid) {
@@ -274,5 +285,5 @@ void LinBusProtocol::lin_msg_diag_multi_() {
   }
 }
 
-}  // namespace truma_inetbox
+}  // namespace linbus_inetbox
 }  // namespace esphome

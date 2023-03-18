@@ -152,6 +152,19 @@ bool LinBusListener::check_for_lin_fault_() {
   }
 }
 
+bool lin_request_pid_(const u_int8_t pid) {
+  
+  this->current_PID_ = pid;
+  // prefill the header: break and sync byte
+  u_int8_t data[3] = {0x00, 0x55, 0x00};
+
+  data[3] = this->current_PID_ | (addr_parity(this->current_PID_) << 6;
+  if (!this->observer_mode_) {
+    this->write_array(data, len);
+    this->write(data_CRC);
+  }
+}
+
 void LinBusListener::onReceive_() {
   if (!this->check_for_lin_fault_()) {
     while (this->available()) {
@@ -390,7 +403,7 @@ void LinBusListener::process_log_queue_(TickType_t xTicksToWait) {
         break;
 #ifdef ESPHOME_LOG_HAS_VERBOSE
       case QUEUE_LOG_MSG_TYPE::VERBOSE_READ_LIN_FRAME_MSG:
-        // Mark the PID of the TRUMA Combi heater as very verbose message.
+        // Mark the PID of the TRU_MA Combi heater as very verbose message.
         // JK_Todo mark configured LIN PIDs as very verboos
         if (current_PID == 0x20 || current_PID == 0x21 || current_PID == 0x22 ||
             ((current_PID == DIAGNOSTIC_FRAME_MASTER || current_PID == DIAGNOSTIC_FRAME_SLAVE) &&

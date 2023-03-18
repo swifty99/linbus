@@ -4,16 +4,16 @@
 #include "driver/uart.h"
 #include "soc/uart_struct.h"
 #include "soc/uart_reg.h"
-#include "esphome/components/uart/truma_uart_component_esp32_arduino.h"
+#include "esphome/components/uart/linbus_uart_component_esp32_arduino.h"
 #include "esphome/components/uart/uart_component_esp32_arduino.h"
 
 namespace esphome {
 namespace lin_bus {
 
-static const char *const TAG = "truma_inetbox.LinBusListener";
+static const char *const TAG = "linbus_inetbox.LinBusListener";
 
 void LinBusListener::setup_framework() {
-  auto uartComp = static_cast<esphome::uart::truma_ESP32ArduinoUARTComponent *>(this->parent_);
+  auto uartComp = static_cast<esphome::uart::linbus_ESP32ArduinoUARTComponent *>(this->parent_);
 
   auto uart_num = uartComp->get_hw_serial_number();
   auto hw_serial = uartComp->get_hw_serial();

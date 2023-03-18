@@ -1,22 +1,22 @@
 #ifdef USE_RP2040
 #include "LinBusListener.h"
 #include "esphome/core/log.h"
-#include "esphome/components/uart/truma_uart_component_rp2040.h"
+#include "esphome/components/uart/linbus_uart_component_rp2040.h"
 #include "esphome/components/uart/uart_component_rp2040.h"
 #include <SerialUART.h>
 
 // Instance 1 for UART port 0
-static esphome::truma_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_1 = nullptr;
+static esphome::linbus_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_1 = nullptr;
 // Instance 2 for UART port 1
-static esphome::truma_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_2 = nullptr;
+static esphome::linbus_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_2 = nullptr;
 
 namespace esphome {
 namespace lin_bus {
 
-static const char *const TAG = "truma_inetbox.LinBusListener";
+static const char *const TAG = "linbus_inetbox.LinBusListener";
 
 void LinBusListener::setup_framework() {
-  auto uartComp = static_cast<esphome::uart::truma_RP2040UartComponent *>(this->parent_);
+  auto uartComp = static_cast<esphome::uart::linbus_RP2040UartComponent *>(this->parent_);
   auto is_hw_serial = uartComp->is_hw_serial();
   if (!is_hw_serial) {
     ESP_LOGW(TAG, "Must use hardware serial SerialPIO is not supported.");

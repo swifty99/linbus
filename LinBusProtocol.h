@@ -4,15 +4,17 @@
 #include "LinBusListener.h"
 
 namespace esphome {
-namespace truma_inetbox {
+namespace linbus {
 class LinBusProtocol : public LinBusListener {
  public:
   virtual const std::array<u_int8_t, 4> lin_identifier() = 0;
   virtual void lin_heartbeat() = 0;
   virtual void lin_reset_device();
+  virtual bool lin_request_pid(const u_int8_t pid);
 
  protected:
   const std::array<u_int8_t, 8> lin_empty_response_ = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
 
   bool answer_lin_order_(const u_int8_t pid) override;
   void lin_message_recieved_(const u_int8_t pid, const u_int8_t *message, u_int8_t length) override;
@@ -39,5 +41,5 @@ class LinBusProtocol : public LinBusListener {
   void lin_msg_diag_multi_();
 };
 
-}  // namespace truma_inetbox
+}  // namespace linbus
 }  // namespace esphome
