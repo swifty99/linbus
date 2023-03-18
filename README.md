@@ -36,4 +36,18 @@ linbus:
  ```
 
 
-Sending 
+Trigger data request.
+the master will never receive data unless triggered.
+While the receive on frame is set, the master initiates communication_
+
+### linbus.request_pid Action
+
+To receive a PID as master the PID will be put on the bus, the slave will follow to answer:
+
+```on_...:
+  - linbus.request_pid: 0x33
+```
+
+If the Slave ist alive it will answer and the `on_frame` automation (if configured) will be triggered.
+
+
