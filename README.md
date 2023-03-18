@@ -18,4 +18,22 @@ A LIN node can only be master or slave. This configured in the linbus component,
 
 A Lin Slave does not trigger communication. It listens for configurated PIDs and answers with the data provided. This is async and not yet implemented.  A listener for each PID shall be implemented
 
+## Master
+
 A Lin Master starts all communication by sending a PID header. A slave will answer the request.
+
+Whatever data the master shall receive it needs to be configuredn in the on_frame trigger/automation
+
+```# Example configuration entry
+linbus:
+  uart_id: lin_uart_bus
+    on_frame:
+    - lin_pid: 0x33
+      then:
+      - lambda: |-
+          std::string b(x.begin(), x.end());
+          ESP_LOGD("lin pid 0x33", "%s", &b[0] );
+ ```
+
+
+Sending 
