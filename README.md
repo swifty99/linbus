@@ -51,4 +51,16 @@ on_...:
 
 If the Slave ist alive it will answer and the `on_frame` automation (if configured) will be triggered.
 
+### linbus.send_pid Action
+
+Only the master can send a PID. It will send the data an the header with:
+
+```
+on_...:
+  - linbus.send:
+      data: [ 0x10, 0x20, 0x30 ]   #maximum 8 bytes
+      lin_pid: 0x33
+```
+
+
 
