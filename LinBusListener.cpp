@@ -70,6 +70,40 @@ void LinBusListener::setup() {
 
 void LinBusListener::update() { this->check_for_lin_fault_(); }
 
+bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid){
+
+  // this code is probably bad here. it shold be somehow integratd in the listeners
+  // this could be out of sync
+
+  // prefill the header: break and sync byte
+  u_int8_t linframe[11] = {0x00, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+  // add PID with checksum
+  linframe[2] = pid | (addr_parity(pid) << 6);
+  
+  // fill databytes
+  for (i = 0; i< len; i++){
+    linframe[i+3]= data[i];
+  }
+
+  // calc CRC
+  u_int8_t data_CRC = 0;
+  if (this->lin_checksum_ == LIN_CHECKSUM::LIN_CHECKSUM_VERSION_1 || this->current_PID_ == DIAGNOSTIC_FRAME_SLAVE) {
+    // LIN checksum V1
+    data_CRC = data_checksum(data, len, 0);
+  } else {
+    // LIN checksum V2
+    data_CRC = data_checksum(data, len, pid);
+  }
+  if (!this->observer_mode_) {
+    this->write_array(linframe, len+3);
+    this->write(data_CRC);
+    ESP_LOGV(TAG, "LinTX %02X %s", pid, format_hex_pretty(linframe, len+3).c_str());
+
+  }
+  
+}
+
 void LinBusListener::write_lin_answer_(const u_int8_t *data, u_int8_t len) {
   QUEUE_LOG_MSG log_msg = QUEUE_LOG_MSG();
   if (!this->can_write_lin_answer_) {
@@ -158,7 +192,7 @@ bool lin_request_pid_(const u_int8_t pid) {
   // prefill the header: break and sync byte
   u_int8_t data[3] = {0x00, 0x55, 0x00};
 
-  data[3] = this->current_PID_ | (addr_parity(this->current_PID_) << 6;
+  data[2] = this->current_PID_ | (addr_parity(this->current_PID_) << 6;
   if (!this->observer_mode_) {
     this->write_array(data, len);
     this->write(data_CRC);

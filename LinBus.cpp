@@ -1,592 +1,390 @@
-#include "modbus_controller.h"
-#include "esphome/core/application.h"
+#include "LinBus.h"
 #include "esphome/core/log.h"
+#include "esphome/core/helpers.h"
+#include "helpers.h"
 
 namespace esphome {
-namespace modbus_controller {
+namespace linbus {
 
-static const char *const TAG = "modbus_controller";
+static const char *const TAG = "linbus.LinBus";
 
-void ModbusController::setup() {
-  // Modbus::setup();
-  this->create_register_ranges_();
+// the listeners are needed for slave, not yet implemented here
+// LinBus::LinBus(u_int8_t expected_listener_count) {
+//   this->listeners_heater_.reserve(expected_listener_count);
+// }
+
+void LinBus::update() {
+  // Call listeners in after method 'lin_multiframe_recieved' call.
+  // Because 'lin_multiframe_recieved' is time critical an all these sensors can take some time.
+
+  }
+  LinBusProtocol::update();
+
+// setup() and dump_config() are not overloaded. LinProtocol handles them.
+
+const std::array<uint8_t, 4> LinBus::lin_identifier() {
+  // Supplier Id: 0x4617 - Truma (Phone: +49 (0)89 4617-0)
+  // Unknown:
+  // 17.46.01.03 - Unknown more comms required for init.
+
+  return {0x17 /*Supplied Id*/, 0x46 /*Supplied Id*/, 0x00 /*Function Id*/, 0x1F /*Function Id*/};
 }
 
-/*
- To work with the existing modbus class and avoid polling for responses a command queue is used.
- send_next_command will submit the command at the top of the queue and set the corresponding callback
- to handle the response from the device.
- Once the response has been processed it is removed from the queue and the next command is sent
-*/
-bool ModbusController::send_next_command_() {
-  uint32_t last_send = millis() - this->last_command_timestamp_;
+void LinBus::send_data(uint8_t lin_pid, const std::vector<uint8_t> &data) {
 
-  if ((last_send > this->command_throttle_) && !waiting_for_response() && !command_queue_.empty()) {
-    auto &command = command_queue_.front();
+  uint8_t len = static_cast<uint8_t>(data.size());
 
-    // remove from queue if command was sent too often
-    if (command->send_countdown < 1) {
-      ESP_LOGD(
-          TAG,
-          "Modbus command to device=%d register=0x%02X countdown=%d no response received - removed from send queue",
-          this->address_, command->register_address, command->send_countdown);
-      command_queue_.pop_front();
+  if (len > LIN_MAX_DATA_LENGTH)
+    len = LIN_MAX_DATA_LENGTH;
+
+  //call the protocol to send Data
+  send_lin_pid_withdata_(data, len, lin_pid);
+}
+
+
+
+void LinBus::lin_heartbeat() { this->device_registered_ = micros(); }
+
+void LinBus::lin_reset_device() {
+  LinBusProtocol::lin_reset_device();
+  // this->device_registered_ = micros();
+  // this->init_recieved_ = 0;
+
+  // this->update_time_ = 0;
+
+}
+
+
+// A listener is needed as slave, truma inet code below, not needed for LIN master:
+// void LinBus::register_listener(const std::function<void(const StatusFrameHeater *)> &func) {
+//   StatusFrameListener listener = {};
+//   listener.on_heater_change = func;
+//   this->listeners_heater_.push_back(std::move(listener));
+
+//   if (this->status_heater_valid_) {
+//     func(&this->status_heater_);
+//   }
+// }
+
+
+
+
+// a slave function, maybe a "set_data" prepares the Slave response
+// as Slave cannot "send"
+bool LinBus::answer_lin_order_(const u_int8_t pid) {
+  // Alive message
+  if (pid == LIN_PID_linbusINET_BOX) {
+    std::array<u_int8_t, 8> response = this->lin_empty_response_;
+
+    if (this->updates_to_send_.empty() && !this->has_update_to_submit_()) {
+      response[0] = 0xFE;
+    }
+    this->write_lin_answer_(response.data(), (u_int8_t) sizeof(response));
+    return true;
+  }
+  return LinBusProtocol::answer_lin_order_(pid);
+}
+
+bool LinBus::lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) {
+  if (identifier == 0x00 /* LIN Product Identification */) {
+    auto lin_identifier = this->lin_identifier();
+    (*response)[0] = lin_identifier[0];
+    (*response)[1] = lin_identifier[1];
+    (*response)[2] = lin_identifier[2];
+    (*response)[3] = lin_identifier[3];
+    (*response)[4] = 0x01;  // Variant
+    return true;
+  } else if (identifier == 0x20 /* Product details to display in CP plus */) {
+    auto lin_identifier = this->lin_identifier();
+    // Only the first three parts are displayed.
+    (*response)[0] = lin_identifier[0];
+    (*response)[1] = lin_identifier[1];
+    (*response)[2] = lin_identifier[2];
+    // (*response)[3] = // unknown
+    // (*response)[4] = // unknown
+    return true;
+  } 
+  return false;
+}
+
+const u_int8_t *LinBus::lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
+                                                         u_int8_t *return_len) {
+  static u_int8_t response[48] = {};
+  // Validate message prefix.
+  if (message_len < linbusmessage_header.size()) {
+    return nullptr;
+  }
+  for (u_int8_t i = 1; i < linbusmessage_header.size(); i++) {
+    if (message[i] != linbusmessage_header[i]) {
+      return nullptr;
+    }
+  }
+
+  if (message[0] == LIN_SID_READ_STATE_BUFFER) {
+    // Example: BA.00.1F.00.1E.00.00.22.FF.FF.FF (11)
+    memset(response, 0, sizeof(response));
+    auto response_frame = reinterpret_cast<StatusFrame *>(response);
+
+    // The order must match with the method 'has_update_to_submit_'.
+    if (this->init_recieved_ == 0) {
+      ESP_LOGD(TAG, "Requested read: Sending init");
+      status_frame_create_init(response_frame, return_len, this->message_counter++);
+      return response;
+    } else if (this->update_status_heater_unsubmitted_) {
+      ESP_LOGD(TAG, "Requested read: Sending heater update");
+      status_frame_create_update_heater(
+          response_frame, return_len, this->message_counter++, this->update_status_heater_.target_temp_room,
+          this->update_status_heater_.target_temp_water, this->update_status_heater_.heating_mode,
+          this->update_status_heater_.energy_mix_a, this->update_status_heater_.el_power_level_a);
+
+      this->update_time_ = 0;
+      this->update_status_heater_prepared_ = false;
+      this->update_status_heater_unsubmitted_ = false;
+      this->update_status_heater_stale_ = true;
+      return response;
+    } else if (this->update_status_timer_unsubmitted_) {
+      ESP_LOGD(TAG, "Requested read: Sending timer update");
+      status_frame_create_update_timer(
+          response_frame, return_len, this->message_counter++, this->update_status_timer_.timer_resp_active,
+          this->update_status_timer_.timer_resp_start_hours, this->update_status_timer_.timer_resp_start_minutes,
+          this->update_status_timer_.timer_resp_stop_hours, this->update_status_timer_.timer_resp_stop_minutes,
+          this->update_status_timer_.timer_target_temp_room, this->update_status_timer_.timer_target_temp_water,
+          this->update_status_timer_.timer_heating_mode, this->update_status_timer_.timer_energy_mix_a,
+          this->update_status_timer_.timer_el_power_level_a);
+
+      this->update_time_ = 0;
+      this->update_status_timer_prepared_ = false;
+      this->update_status_timer_unsubmitted_ = false;
+      this->update_status_timer_stale_ = true;
+      return response;
+
     } else {
-      ESP_LOGV(TAG, "Sending next modbus command to device %d register 0x%02X count %d", this->address_,
-               command->register_address, command->register_count);
-      command->send();
-      this->last_command_timestamp_ = millis();
-      // remove from queue if no handler is defined
-      if (!command->on_data_func) {
-        command_queue_.pop_front();
-      }
+      ESP_LOGW(TAG, "Requested read: CP Plus asks for an update, but I have none.");
     }
   }
-  return (!command_queue_.empty());
-}
 
-// Queue incoming response
-void ModbusController::on_modbus_data(const std::vector<uint8_t> &data) {
-  auto &current_command = this->command_queue_.front();
-  if (current_command != nullptr) {
-    // Move the commandItem to the response queue
-    current_command->payload = data;
-    this->incoming_queue_.push(std::move(current_command));
-    ESP_LOGV(TAG, "Modbus response queued");
-    command_queue_.pop_front();
-  }
-}
-
-// Dispatch the response to the registered handler
-void ModbusController::process_modbus_data_(const ModbusCommandItem *response) {
-  ESP_LOGV(TAG, "Process modbus response for address 0x%X size: %zu", response->register_address,
-           response->payload.size());
-  response->on_data_func(response->register_type, response->register_address, response->payload);
-}
-
-void ModbusController::on_modbus_error(uint8_t function_code, uint8_t exception_code) {
-  ESP_LOGE(TAG, "Modbus error function code: 0x%X exception: %d ", function_code, exception_code);
-  // Remove pending command waiting for a response
-  auto &current_command = this->command_queue_.front();
-  if (current_command != nullptr) {
-    ESP_LOGE(TAG,
-             "Modbus error - last command: function code=0x%X  register address = 0x%X  "
-             "registers count=%d "
-             "payload size=%zu",
-             function_code, current_command->register_address, current_command->register_count,
-             current_command->payload.size());
-    command_queue_.pop_front();
-  }
-}
-
-SensorSet ModbusController::find_sensors_(ModbusRegisterType register_type, uint16_t start_address) const {
-  auto reg_it = find_if(begin(register_ranges_), end(register_ranges_), [=](RegisterRange const &r) {
-    return (r.start_address == start_address && r.register_type == register_type);
-  });
-
-  if (reg_it == register_ranges_.end()) {
-    ESP_LOGE(TAG, "No matching range for sensor found - start_address : 0x%X", start_address);
-  } else {
-    return reg_it->sensors;
+  if (message_len < sizeof(StatusFrame) && message[0] == LIN_SID_FIll_STATE_BUFFFER) {
+    return nullptr;
   }
 
-  // not found
-  return {};
-}
-void ModbusController::on_register_data(ModbusRegisterType register_type, uint16_t start_address,
-                                        const std::vector<uint8_t> &data) {
-  ESP_LOGV(TAG, "data for register address : 0x%X : ", start_address);
-
-  // loop through all sensors with the same start address
-  auto sensors = find_sensors_(register_type, start_address);
-  for (auto *sensor : sensors) {
-    sensor->parse_and_publish(data);
+  auto statusFrame = reinterpret_cast<const StatusFrame *>(message);
+  auto header = &statusFrame->inner.genericHeader;
+  // Validate Truma frame checksum
+  if (header->checksum != data_checksum(&statusFrame->raw[10], sizeof(StatusFrame) - 10, (0xFF - header->checksum)) ||
+      header->header_2 != 'T' || header->header_3 != 0x01) {
+    ESP_LOGE(TAG, "Truma checksum fail.");
+    return nullptr;
   }
-}
 
-void ModbusController::queue_command(const ModbusCommandItem &command) {
-  // check if this command is already qeued.
-  // not very effective but the queue is never really large
-  for (auto &item : command_queue_) {
-    if (item->is_equal(command)) {
-      ESP_LOGW(TAG, "Duplicate modbus command found: type=0x%x address=%u count=%u",
-               static_cast<uint8_t>(command.register_type), command.register_address, command.register_count);
-      // update the payload of the queued command
-      // replaces a previous command
-      item->payload = command.payload;
-      return;
-    }
-  }
-  command_queue_.push_back(make_unique<ModbusCommandItem>(command));
-}
+  // create acknowledge response.
+  response[0] = (header->service_identifier | LIN_SID_RESPONSE);
+  (*return_len) = 1;
 
-void ModbusController::update_range_(RegisterRange &r) {
-  ESP_LOGV(TAG, "Range : %X Size: %x (%d) skip: %d", r.start_address, r.register_count, (int) r.register_type,
-           r.skip_updates_counter);
-  if (r.skip_updates_counter == 0) {
-    // if a custom command is used the user supplied custom_data is only available in the SensorItem.
-    if (r.register_type == ModbusRegisterType::CUSTOM) {
-      auto sensors = this->find_sensors_(r.register_type, r.start_address);
-      if (!sensors.empty()) {
-        auto sensor = sensors.cbegin();
-        auto command_item = ModbusCommandItem::create_custom_command(
-            this, (*sensor)->custom_data,
-            [this](ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data) {
-              this->on_register_data(ModbusRegisterType::CUSTOM, start_address, data);
-            });
-        command_item.register_address = (*sensor)->start_address;
-        command_item.register_count = (*sensor)->register_count;
-        command_item.function_code = ModbusFunctionCode::CUSTOM;
-        queue_command(command_item);
-      }
+  if (header->message_type == STATUS_FRAME_HEATER && header->message_length == sizeof(StatusFrameHeater)) {
+    ESP_LOGI(TAG, "StatusFrameHeater");
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|tRoom|mo|  |elecA|tWate|elecB|mi|mi|cWate|cRoom|st|err  |  |
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.14.33.00.12.00.00.00.00.00.00.00.00.00.00.01.01.CC.0B.6C.0B.00.00.00.00
+    this->status_heater_ = statusFrame->inner.heater;
+    this->status_heater_valid_ = true;
+    this->status_heater_updated_ = true;
+
+    this->update_status_heater_stale_ = false;
+    return response;
+  } else if (header->message_type == STATUS_FRAME_AIRCON && header->message_length == sizeof(StatusFrameAircon)) {
+    ESP_LOGI(TAG, "StatusFrameAircon");
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|
+    // - ac temps form 16 - 30 C in +2 steps
+    // - activation and deactivation of the ac ventilating
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.AA.00.00.71.01.00.00.00.00.86.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.A5.00.00.71.01.00.00.00.00.8B.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.A5.00.00.71.01.00.00.00.00.8B.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.4B.05.00.71.01.4A.0B.00.00.8B.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.37.05.00.71.01.5E.0B.00.00.8B.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.24.05.00.71.01.72.0B.00.00.8A.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.13.05.00.71.01.86.0B.00.00.87.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.FC.05.00.71.01.9A.0B.00.00.89.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.E8.05.00.71.01.AE.0B.00.00.89.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.D5.05.00.71.01.C2.0B.00.00.88.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.C1.05.00.71.01.D6.0B.00.00.88.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.A7.00.00.71.01.00.00.00.00.89.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.C2.04.00.71.01.D6.0B.00.00.88.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.13.04.00.71.01.86.0B.00.00.88.0B.00.00.00.00.00.00.AA.0A
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.12.35.00.A8.00.00.71.01.00.00.00.00.88.0B.00.00.00.00.00.00.AA.0A
+    this->status_aircon_ = statusFrame->inner.aircon;
+    this->status_aircon_valid_ = true;
+    this->status_aircon_updated_ = true;
+
+    this->update_status_aircon_stale_ = false;
+    return response;
+  } else if (header->message_type == STATUS_FRAME_AIRCON_INIT &&
+             header->message_length == sizeof(StatusFrameAirconInit)) {
+    ESP_LOGI(TAG, "StatusFrameAirconInit");
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.16.3F.00.E2.00.00.71.01.00.00.00.00.00.00.00.00.00.00.00.00.00.00.00.00
+    return response;
+  } else if (header->message_type == STATUS_FRAME_TIMER && header->message_length == sizeof(StatusFrameTimer)) {
+    ESP_LOGI(TAG, "StatusFrameTimer");
+    // EXAMPLE:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|tRoom|mo|??|elecA|tWate|elecB|mi|mi|<--response-->|??|??|on|start|stop-|
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.18.3D.00.1D.18.0B.01.00.00.00.00.00.00.00.01.01.00.00.00.00.00.00.00.01.00.08.00.09
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.18.3D.00.13.18.0B.0B.00.00.00.00.00.00.00.01.01.00.00.00.00.00.00.00.01.00.08.00.09
+    this->status_timer_ = statusFrame->inner.timer;
+    this->status_timer_valid_ = true;
+    this->status_timer_updated_ = true;
+
+    this->update_status_timer_stale_ = false;
+
+    ESP_LOGD(TAG, "StatusFrameTimer target_temp_room: %f target_temp_water: %f %02u:%02u -> %02u:%02u %s",
+             temp_code_to_decimal(this->status_timer_.timer_target_temp_room),
+             temp_code_to_decimal(this->status_timer_.timer_target_temp_water), this->status_timer_.timer_start_hours,
+             this->status_timer_.timer_start_minutes, this->status_timer_.timer_stop_hours,
+             this->status_timer_.timer_stop_minutes, ((u_int8_t) this->status_timer_.timer_active ? " ON" : " OFF"));
+
+    return response;
+  } else if (header->message_type == STATUS_FRAME_RESPONSE_ACK &&
+             header->message_length == sizeof(StatusFrameResponseAck)) {
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.02.0D.01.98.02.00
+    auto data = statusFrame->inner.responseAck;
+
+    if (data.error_code != ResponseAckResult::RESPONSE_ACK_RESULT_OKAY) {
+      ESP_LOGW(TAG, "StatusFrameResponseAck");
     } else {
-      queue_command(ModbusCommandItem::create_read_command(this, r.register_type, r.start_address, r.register_count));
+      ESP_LOGI(TAG, "StatusFrameResponseAck");
     }
-    r.skip_updates_counter = r.skip_updates;  // reset counter to config value
-  } else {
-    r.skip_updates_counter--;
-  }
-}
-//
-// Queue the modbus requests to be send.
-// Once we get a response to the command it is removed from the queue and the next command is send
-//
-void ModbusController::update() {
-  if (!command_queue_.empty()) {
-    ESP_LOGV(TAG, "%zu modbus commands already in queue", command_queue_.size());
-  } else {
-    ESP_LOGV(TAG, "Updating modbus component");
-  }
+    ESP_LOGD(TAG, "StatusFrameResponseAck %02X %s %02X", statusFrame->inner.genericHeader.command_counter,
+             data.error_code == ResponseAckResult::RESPONSE_ACK_RESULT_OKAY ? " OKAY " : " FAILED ",
+             (u_int8_t) data.error_code);
 
-  for (auto &r : this->register_ranges_) {
-    ESP_LOGVV(TAG, "Updating range 0x%X", r.start_address);
-    update_range_(r);
-  }
-}
-
-// walk through the sensors and determine the register ranges to read
-size_t ModbusController::create_register_ranges_() {
-  register_ranges_.clear();
-  if (sensorset_.empty()) {
-    ESP_LOGW(TAG, "No sensors registered");
-    return 0;
-  }
-
-  // iterator is sorted see SensorItemsComparator for details
-  auto ix = sensorset_.begin();
-  RegisterRange r = {};
-  uint8_t buffer_offset = 0;
-  SensorItem *prev = nullptr;
-  while (ix != sensorset_.end()) {
-    SensorItem *curr = *ix;
-
-    ESP_LOGV(TAG, "Register: 0x%X %d %d %d offset=%u skip=%u addr=%p", curr->start_address, curr->register_count,
-             curr->offset, curr->get_register_size(), curr->offset, curr->skip_updates, curr);
-
-    if (r.register_count == 0) {
-      // this is the first register in range
-      r.start_address = curr->start_address;
-      r.register_count = curr->register_count;
-      r.register_type = curr->register_type;
-      r.sensors.insert(curr);
-      r.skip_updates = curr->skip_updates;
-      r.skip_updates_counter = 0;
-      buffer_offset = curr->get_register_size();
-
-      ESP_LOGV(TAG, "Started new range");
-    } else {
-      // this is not the first register in range so it might be possible
-      // to reuse the last register or extend the current range
-      if (!curr->force_new_range && r.register_type == curr->register_type &&
-          curr->register_type != ModbusRegisterType::CUSTOM) {
-        if (curr->start_address == (r.start_address + r.register_count - prev->register_count) &&
-            curr->register_count == prev->register_count && curr->get_register_size() == prev->get_register_size()) {
-          // this register can re-use the data from the previous register
-
-          // remove this sensore because start_address is changed (sort-order)
-          ix = sensorset_.erase(ix);
-
-          curr->start_address = r.start_address;
-          curr->offset += prev->offset;
-
-          sensorset_.insert(curr);
-          // move iterator backwards because it will be incremented later
-          ix--;
-
-          ESP_LOGV(TAG, "Re-use previous register - change to register: 0x%X %d offset=%u", curr->start_address,
-                   curr->register_count, curr->offset);
-        } else if (curr->start_address == (r.start_address + r.register_count)) {
-          // this register can extend the current range
-
-          // remove this sensore because start_address is changed (sort-order)
-          ix = sensorset_.erase(ix);
-
-          curr->start_address = r.start_address;
-          curr->offset += buffer_offset;
-          buffer_offset += curr->get_register_size();
-          r.register_count += curr->register_count;
-
-          sensorset_.insert(curr);
-          // move iterator backwards because it will be incremented later
-          ix--;
-
-          ESP_LOGV(TAG, "Extend range - change to register: 0x%X %d offset=%u", curr->start_address,
-                   curr->register_count, curr->offset);
-        }
-      }
+    if (data.error_code != ResponseAckResult::RESPONSE_ACK_RESULT_OKAY) {
+      // I tried to update something and it failed. Read current state again to validate and hold any updates for now.
+      this->lin_reset_device();
     }
 
-    if (curr->start_address == r.start_address && curr->register_type == r.register_type) {
-      // use the lowest non zero value for the whole range
-      // Because zero is the default value for skip_updates it is excluded from getting the min value.
-      if (curr->skip_updates != 0) {
-        if (r.skip_updates != 0) {
-          r.skip_updates = std::min(r.skip_updates, curr->skip_updates);
-        } else {
-          r.skip_updates = curr->skip_updates;
-        }
-      }
+    return response;
+  } else if (header->message_type == STATUS_FRAME_CLOCK && header->message_length == sizeof(StatusFrameClock)) {
+    ESP_LOGI(TAG, "StatusFrameClock");
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.15.00.5B.0D.20.00.01.01.00.00.01.00.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.15.00.71.16.00.00.01.01.00.00.02.00.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.15.00.2B.16.1F.28.01.01.00.00.01.00.00
+    this->status_clock_ = statusFrame->inner.clock;
+    this->status_clock_valid_ = true;
+    this->status_clock_updated_ = true;
 
-      // add sensor to this range
-      r.sensors.insert(curr);
+    ESP_LOGD(TAG, "StatusFrameClock %02d:%02d:%02d", this->status_clock_.clock_hour, this->status_clock_.clock_minute,
+             this->status_clock_.clock_second);
 
-      ix++;
-    } else {
-      ESP_LOGV(TAG, "Add range 0x%X %d skip:%d", r.start_address, r.register_count, r.skip_updates);
-      register_ranges_.push_back(r);
-      r = {};
-      buffer_offset = 0;
-      // do not increment the iterator here because the current sensor has to be re-evaluated
+    return response;
+  } else if (header->message_type == STAUTS_FRAME_CONFIG && header->message_length == sizeof(StatusFrameConfig)) {
+    ESP_LOGI(TAG, "StatusFrameConfig");
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.17.00.0F.06.01.B4.0A.AA.0A.00.00.00.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.17.00.41.06.01.B4.0A.78.0A.00.00.00.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0A.17.00.0F.06.01.B4.0A.AA.0A.00.00.00.00
+    this->status_config_ = statusFrame->inner.config;
+    this->status_config_valid_ = true;
+    this->status_config_updated_ = true;
+
+    ESP_LOGD(TAG, "StatusFrameConfig Offset: %.1f", offset_code_to_decimal(this->status_config_.temp_offset));
+
+    return response;
+  } else if (header->message_type == STATUS_FRAME_DEVICES && header->message_length == sizeof(StatusFrameDevice)) {
+    ESP_LOGI(TAG, "StatusFrameDevice");
+    // This message is special. I recieve one response per registered (at CP plus) device.
+    // Example:
+    // SID<---------PREAMBLE---------->|<---MSG_HEAD---->|count|??|??|Hardware|Software|??|??
+    // Combi4
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.79.02.00.01.00.50.00.00.04.03.02.AD.10 - C4.03.02 0050.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.27.02.01.01.00.40.03.22.02.00.01.00.00 - H2.00.01 0340.22
+    // VarioHeat Comfort w/o E-Kit
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.C2.02.00.01.00.51.00.00.05.01.00.66.10 - P5.01.00 0051.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.64.02.01.01.00.20.06.02.03.00.00.00.00 - H3.00.00 0620.02
+    // Combi6DE + Saphir Compact AC
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.C7.03.00.01.00.50.00.00.04.03.00.60.10
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.71.03.01.01.00.10.03.02.06.00.02.00.00
+    // BB.00.1F.00.1E.00.00.22.FF.FF.FF.54.01.0C.0B.00.7C.03.02.01.00.01.0C.00.01.02.01.00.00
+
+    auto device = statusFrame->inner.device;
+
+    this->init_recieved_ = micros();
+
+    ESP_LOGD(TAG, "StatusFrameDevice %d/%d - %d.%02d.%02d %04X.%02X (%02X %02X)", device.device_id + 1,
+             device.device_count, device.software_revision[0], device.software_revision[1], device.software_revision[2],
+             device.hardware_revision_major, device.hardware_revision_minor, device.unknown_2, device.unknown_3);
+
+    const auto linbusdevice = static_cast<linbusDEVICE>(device.software_revision[0]);
+    {
+      bool found_unknown_value = false;
+      if (device.unknown_0 != 0x01 || device.unknown_1 != 0x00)
+        found_unknown_value = true;
+      if (linbusdevice != linbusDEVICE::AIRCON_DEVICE && linbusdevice != linbusDEVICE::HEATER_COMBI4 &&
+          linbusdevice != linbusDEVICE::HEATER_VARIO && linbusdevice != linbusDEVICE::CPPLUS_COMBI &&
+          linbusdevice != linbusDEVICE::CPPLUS_VARIO && linbusdevice != linbusDEVICE::HEATER_COMBI6D)
+        found_unknown_value = true;
+
+      if (found_unknown_value)
+        ESP_LOGW(TAG, "Unknown information in StatusFrameDevice found. Please report.");
     }
 
-    prev = curr;
-  }
-
-  if (r.register_count > 0) {
-    // Add the last range
-    ESP_LOGV(TAG, "Add last range 0x%X %d skip:%d", r.start_address, r.register_count, r.skip_updates);
-    register_ranges_.push_back(r);
-  }
-
-  return register_ranges_.size();
-}
-
-void ModbusController::dump_config() {
-  ESP_LOGCONFIG(TAG, "ModbusController:");
-  ESP_LOGCONFIG(TAG, "  Address: 0x%02X", this->address_);
-#if ESPHOME_LOG_LEVEL >= ESPHOME_LOG_LEVEL_VERBOSE
-  ESP_LOGCONFIG(TAG, "sensormap");
-  for (auto &it : sensorset_) {
-    ESP_LOGCONFIG(TAG, " Sensor type=%zu start=0x%X offset=0x%X count=%d size=%d",
-                  static_cast<uint8_t>(it->register_type), it->start_address, it->offset, it->register_count,
-                  it->get_register_size());
-  }
-  ESP_LOGCONFIG(TAG, "ranges");
-  for (auto &it : register_ranges_) {
-    ESP_LOGCONFIG(TAG, "  Range type=%zu start=0x%X count=%d skip_updates=%d", static_cast<uint8_t>(it.register_type),
-                  it.start_address, it.register_count, it.skip_updates);
-  }
-#endif
-}
-
-void ModbusController::loop() {
-  // Incoming data to process?
-  if (!incoming_queue_.empty()) {
-    auto &message = incoming_queue_.front();
-    if (message != nullptr)
-      process_modbus_data_(message.get());
-    incoming_queue_.pop();
-
-  } else {
-    // all messages processed send pending commands
-    send_next_command_();
-  }
-}
-
-void ModbusController::on_write_register_response(ModbusRegisterType register_type, uint16_t start_address,
-                                                  const std::vector<uint8_t> &data) {
-  ESP_LOGV(TAG, "Command ACK 0x%X %d ", get_data<uint16_t>(data, 0), get_data<int16_t>(data, 1));
-}
-
-void ModbusController::dump_sensors_() {
-  ESP_LOGV(TAG, "sensors");
-  for (auto &it : sensorset_) {
-    ESP_LOGV(TAG, "  Sensor start=0x%X count=%d size=%d offset=%d", it->start_address, it->register_count,
-             it->get_register_size(), it->offset);
-  }
-}
-
-ModbusCommandItem ModbusCommandItem::create_read_command(
-    ModbusController *modbusdevice, ModbusRegisterType register_type, uint16_t start_address, uint16_t register_count,
-    std::function<void(ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data)>
-        &&handler) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = register_type;
-  cmd.function_code = modbus_register_read_function(register_type);
-  cmd.register_address = start_address;
-  cmd.register_count = register_count;
-  cmd.on_data_func = std::move(handler);
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_read_command(ModbusController *modbusdevice,
-                                                         ModbusRegisterType register_type, uint16_t start_address,
-                                                         uint16_t register_count) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = register_type;
-  cmd.function_code = modbus_register_read_function(register_type);
-  cmd.register_address = start_address;
-  cmd.register_count = register_count;
-  cmd.on_data_func = [modbusdevice](ModbusRegisterType register_type, uint16_t start_address,
-                                    const std::vector<uint8_t> &data) {
-    modbusdevice->on_register_data(register_type, start_address, data);
-  };
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_write_multiple_command(ModbusController *modbusdevice,
-                                                                   uint16_t start_address, uint16_t register_count,
-                                                                   const std::vector<uint16_t> &values) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = ModbusRegisterType::HOLDING;
-  cmd.function_code = ModbusFunctionCode::WRITE_MULTIPLE_REGISTERS;
-  cmd.register_address = start_address;
-  cmd.register_count = register_count;
-  cmd.on_data_func = [modbusdevice, cmd](ModbusRegisterType register_type, uint16_t start_address,
-                                         const std::vector<uint8_t> &data) {
-    modbusdevice->on_write_register_response(cmd.register_type, start_address, data);
-  };
-  for (auto v : values) {
-    auto decoded_value = decode_value(v);
-    cmd.payload.push_back(decoded_value[0]);
-    cmd.payload.push_back(decoded_value[1]);
-  }
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_write_single_coil(ModbusController *modbusdevice, uint16_t address,
-                                                              bool value) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = ModbusRegisterType::COIL;
-  cmd.function_code = ModbusFunctionCode::WRITE_SINGLE_COIL;
-  cmd.register_address = address;
-  cmd.register_count = 1;
-  cmd.on_data_func = [modbusdevice, cmd](ModbusRegisterType register_type, uint16_t start_address,
-                                         const std::vector<uint8_t> &data) {
-    modbusdevice->on_write_register_response(cmd.register_type, start_address, data);
-  };
-  cmd.payload.push_back(value ? 0xFF : 0);
-  cmd.payload.push_back(0);
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_write_multiple_coils(ModbusController *modbusdevice, uint16_t start_address,
-                                                                 const std::vector<bool> &values) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = ModbusRegisterType::COIL;
-  cmd.function_code = ModbusFunctionCode::WRITE_MULTIPLE_COILS;
-  cmd.register_address = start_address;
-  cmd.register_count = values.size();
-  cmd.on_data_func = [modbusdevice, cmd](ModbusRegisterType register_type, uint16_t start_address,
-                                         const std::vector<uint8_t> &data) {
-    modbusdevice->on_write_register_response(cmd.register_type, start_address, data);
-  };
-
-  uint8_t bitmask = 0;
-  int bitcounter = 0;
-  for (auto coil : values) {
-    if (coil) {
-      bitmask |= (1 << bitcounter);
+    if (linbusdevice == linbusDEVICE::HEATER_COMBI4) {
+      this->heater_device_ = linbusDEVICE::HEATER_COMBI4;
+    } else if (linbusdevice == linbusDEVICE::HEATER_COMBI6D) {
+      this->heater_device_ = linbusDEVICE::HEATER_COMBI6D;
+    } else if (linbusdevice == linbusDEVICE::HEATER_VARIO) {
+      this->heater_device_ = linbusDEVICE::HEATER_VARIO;
     }
-    bitcounter++;
-    if (bitcounter % 8 == 0) {
-      cmd.payload.push_back(bitmask);
-      bitmask = 0;
+
+    if (linbusdevice == linbusDEVICE::AIRCON_DEVICE) {
+      this->aircon_device_ = linbusDEVICE::AIRCON_DEVICE;
+    }
+
+    return response;
+  } else {
+    ESP_LOGW(TAG, "Unknown message type %02X", header->message_type);
+  }
+  (*return_len) = 0;
+  return nullptr;
+}
+// slave function
+bool LinBus::has_update_to_submit_() {
+  // No logging in this message!
+  // It is called by interrupt. Logging is a blocking operation (especially when Wifi Logging).
+  // If logging is necessary use logging queue of LinBusListener class.
+  if (this->init_requested_ == 0) {
+    this->init_requested_ = micros();
+    // ESP_LOGD(TAG, "Requesting initial data.");
+    return true;
+  } else if (this->init_recieved_ == 0) {
+    auto init_wait_time = micros() - this->init_requested_;
+    // it has been 5 seconds and i am still awaiting the init data.
+    if (init_wait_time > 1000 * 1000 * 5) {
+      // ESP_LOGD(TAG, "Requesting initial data again.");
+      this->init_requested_ = micros();
+      return true;
+    }
+  } else if (this->update_status_heater_unsubmitted_ || this->update_status_timer_unsubmitted_ ||
+             this->update_status_clock_unsubmitted_) {
+    if (this->update_time_ == 0) {
+      // ESP_LOGD(TAG, "Notify CP Plus I got updates.");
+      this->update_time_ = micros();
+      return true;
+    }
+    auto update_wait_time = micros() - this->update_time_;
+    if (update_wait_time > 1000 * 1000 * 5) {
+      // ESP_LOGD(TAG, "Notify CP Plus again I still got updates.");
+      this->update_time_ = micros();
+      return true;
     }
   }
-  // add remaining bits
-  if (bitcounter % 8) {
-    cmd.payload.push_back(bitmask);
-  }
-  return cmd;
+  return false;
 }
 
-ModbusCommandItem ModbusCommandItem::create_write_single_command(ModbusController *modbusdevice, uint16_t start_address,
-                                                                 uint16_t value) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.register_type = ModbusRegisterType::HOLDING;
-  cmd.function_code = ModbusFunctionCode::WRITE_SINGLE_REGISTER;
-  cmd.register_address = start_address;
-  cmd.register_count = 1;  // not used here anyways
-  cmd.on_data_func = [modbusdevice, cmd](ModbusRegisterType register_type, uint16_t start_address,
-                                         const std::vector<uint8_t> &data) {
-    modbusdevice->on_write_register_response(cmd.register_type, start_address, data);
-  };
-
-  auto decoded_value = decode_value(value);
-  cmd.payload.push_back(decoded_value[0]);
-  cmd.payload.push_back(decoded_value[1]);
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_custom_command(
-    ModbusController *modbusdevice, const std::vector<uint8_t> &values,
-    std::function<void(ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data)>
-        &&handler) {
-  ModbusCommandItem cmd;
-  cmd.modbusdevice = modbusdevice;
-  cmd.function_code = ModbusFunctionCode::CUSTOM;
-  if (handler == nullptr) {
-    cmd.on_data_func = [](ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data) {
-      ESP_LOGI(TAG, "Custom Command sent");
-    };
-  } else {
-    cmd.on_data_func = handler;
-  }
-  cmd.payload = values;
-
-  return cmd;
-}
-
-ModbusCommandItem ModbusCommandItem::create_custom_command(
-    ModbusController *modbusdevice, const std::vector<uint16_t> &values,
-    std::function<void(ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data)>
-        &&handler) {
-  ModbusCommandItem cmd = {};
-  cmd.modbusdevice = modbusdevice;
-  cmd.function_code = ModbusFunctionCode::CUSTOM;
-  if (handler == nullptr) {
-    cmd.on_data_func = [](ModbusRegisterType register_type, uint16_t start_address, const std::vector<uint8_t> &data) {
-      ESP_LOGI(TAG, "Custom Command sent");
-    };
-  } else {
-    cmd.on_data_func = handler;
-  }
-  for (auto v : values) {
-    cmd.payload.push_back((v >> 8) & 0xFF);
-    cmd.payload.push_back(v & 0xFF);
-  }
-
-  return cmd;
-}
-
-bool ModbusCommandItem::send() {
-  if (this->function_code != ModbusFunctionCode::CUSTOM) {
-    modbusdevice->send(uint8_t(this->function_code), this->register_address, this->register_count, this->payload.size(),
-                       this->payload.empty() ? nullptr : &this->payload[0]);
-  } else {
-    modbusdevice->send_raw(this->payload);
-  }
-  ESP_LOGV(TAG, "Command sent %d 0x%X %d", uint8_t(this->function_code), this->register_address, this->register_count);
-  send_countdown--;
-  return true;
-}
-
-bool ModbusCommandItem::is_equal(const ModbusCommandItem &other) {
-  // for custom commands we have to check for identical payloads, since
-  // address/count/type fields will be set to zero
-  return this->function_code == ModbusFunctionCode::CUSTOM
-             ? this->payload == other.payload
-             : other.register_address == this->register_address && other.register_count == this->register_count &&
-                   other.register_type == this->register_type && other.function_code == this->function_code;
-}
-
-void number_to_payload(std::vector<uint16_t> &data, int64_t value, SensorValueType value_type) {
-  switch (value_type) {
-    case SensorValueType::U_WORD:
-    case SensorValueType::S_WORD:
-      data.push_back(value & 0xFFFF);
-      break;
-    case SensorValueType::U_DWORD:
-    case SensorValueType::S_DWORD:
-    case SensorValueType::FP32:
-    case SensorValueType::FP32_R:
-      data.push_back((value & 0xFFFF0000) >> 16);
-      data.push_back(value & 0xFFFF);
-      break;
-    case SensorValueType::U_DWORD_R:
-    case SensorValueType::S_DWORD_R:
-      data.push_back(value & 0xFFFF);
-      data.push_back((value & 0xFFFF0000) >> 16);
-      break;
-    case SensorValueType::U_QWORD:
-    case SensorValueType::S_QWORD:
-      data.push_back((value & 0xFFFF000000000000) >> 48);
-      data.push_back((value & 0xFFFF00000000) >> 32);
-      data.push_back((value & 0xFFFF0000) >> 16);
-      data.push_back(value & 0xFFFF);
-      break;
-    case SensorValueType::U_QWORD_R:
-    case SensorValueType::S_QWORD_R:
-      data.push_back(value & 0xFFFF);
-      data.push_back((value & 0xFFFF0000) >> 16);
-      data.push_back((value & 0xFFFF00000000) >> 32);
-      data.push_back((value & 0xFFFF000000000000) >> 48);
-      break;
-    default:
-      ESP_LOGE(TAG, "Invalid data type for modbus number to payload conversation: %d",
-               static_cast<uint16_t>(value_type));
-      break;
-  }
-}
-
-int64_t payload_to_number(const std::vector<uint8_t> &data, SensorValueType sensor_value_type, uint8_t offset,
-                          uint32_t bitmask) {
-  int64_t value = 0;  // int64_t because it can hold signed and unsigned 32 bits
-
-  switch (sensor_value_type) {
-    case SensorValueType::U_WORD:
-      value = mask_and_shift_by_rightbit(get_data<uint16_t>(data, offset), bitmask);  // default is 0xFFFF ;
-      break;
-    case SensorValueType::U_DWORD:
-    case SensorValueType::FP32:
-      value = get_data<uint32_t>(data, offset);
-      value = mask_and_shift_by_rightbit((uint32_t) value, bitmask);
-      break;
-    case SensorValueType::U_DWORD_R:
-    case SensorValueType::FP32_R:
-      value = get_data<uint32_t>(data, offset);
-      value = static_cast<uint32_t>(value & 0xFFFF) << 16 | (value & 0xFFFF0000) >> 16;
-      value = mask_and_shift_by_rightbit((uint32_t) value, bitmask);
-      break;
-    case SensorValueType::S_WORD:
-      value = mask_and_shift_by_rightbit(get_data<int16_t>(data, offset),
-                                         bitmask);  // default is 0xFFFF ;
-      break;
-    case SensorValueType::S_DWORD:
-      value = mask_and_shift_by_rightbit(get_data<int32_t>(data, offset), bitmask);
-      break;
-    case SensorValueType::S_DWORD_R: {
-      value = get_data<uint32_t>(data, offset);
-      // Currently the high word is at the low position
-      // the sign bit is therefore at low before the switch
-      uint32_t sign_bit = (value & 0x8000) << 16;
-      value = mask_and_shift_by_rightbit(
-          static_cast<int32_t>(((value & 0x7FFF) << 16 | (value & 0xFFFF0000) >> 16) | sign_bit), bitmask);
-    } break;
-    case SensorValueType::U_QWORD:
-    case SensorValueType::S_QWORD:
-      // Ignore bitmask for QWORD
-      value = get_data<uint64_t>(data, offset);
-      break;
-    case SensorValueType::U_QWORD_R:
-    case SensorValueType::S_QWORD_R: {
-      // Ignore bitmask for QWORD
-      uint64_t tmp = get_data<uint64_t>(data, offset);
-      value = (tmp << 48) | (tmp >> 48) | ((tmp & 0xFFFF0000) << 16) | ((tmp >> 16) & 0xFFFF0000);
-    } break;
-    case SensorValueType::RAW:
-    default:
-      break;
-  }
-  return value;
-}
-
-}  // namespace modbus_controller
+}  // namespace linbus
 }  // namespace esphome

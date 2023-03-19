@@ -36,24 +36,15 @@ class LinBus;
 class LinbusTrigger;
 template<typename... Ts> class LinbusSendAction;
 
-/* LIN payload length definitions according to ISO 11898-1 */
-static const uint8_t LIN_MAX_DATA_LENGTH = 8;
-
-/*
-Lin Frame describes a normative LIN Frame
-*/
-struct LinFrame {
-  uint32_t lin_id;           
-  uint8_t data[LIN_MAX_DATA_LENGTH] __attribute__((aligned(8)));
-};
 
 // LinBusprotocoll derives from polling component an uart
 class LinBus : public LinBusProtocol {
  public:
-  LinBus(u_int8_t expected_listener_count);
+  // slave not yet implementded
+  // LinBus(u_int8_t expected_listener_count);
   
   //master onlysend:
-  LinBus();
+  LinBus(){};
 
   // These methods are derived from baseclass:
   // void setup() override;
@@ -65,14 +56,14 @@ class LinBus : public LinBusProtocol {
   void update() override;
 
   // should not bee needed, polling should be able to handle...
-  void loop() override;
+  //void loop() override;
 
   void lin_heartbeat() override;
   void lin_reset_device() override;
 
   void send_data(uint8_t lin_pid, const std::vector<uint8_t> &data);
 
-  void add_trigger(LinbusTrigger *trigger);
+//  void add_trigger(LinbusTrigger *trigger);
 
 protected:
   template<typename... Ts> friend class LinbusSendAction;
@@ -100,17 +91,9 @@ template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public P
 
   void set_lin_id(int8_t lin_pid) { this->pid_ = lin_pid; }
 
-  void play(Ts... x) override {
-    auto lin_pid = this->lin_pid_.has_value() ? *this->lin_pid_ : this->parent_->lin_pid_;
-   if (this->static_) {
-      this->parent_->send_data(lin_pid, this->data_static_);
-    } else {
-      auto val = this->data_func_(x...);
-      this->parent_->send_data(lin_pid, val);
-    }
-  }
+
  protected:
-  optional<uint32_t> lin_pid_{};
+  optional<uint8_t> lin_pid_{};
   bool static_{false};
   std::function<std::vector<uint8_t>(Ts...)> data_func_{};
   std::vector<uint8_t> data_static_{};
@@ -127,6 +110,7 @@ class LinbusTrigger : public Trigger<std::vector<uint8_t>, uint32_t, bool>, publ
   void setup() override { this->parent_->add_trigger(this); }
 
  protected:
+
   Linbus *parent_;
   uint32_t lin_id_;
 };
