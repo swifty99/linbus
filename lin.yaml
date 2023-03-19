@@ -29,7 +29,7 @@ uart:
     parity: NONE
     stop_bits: 2
 
-linbus:
+lin:
   uart_id: lin_uart_bus
   cs_pin: 5
   fault_pin: 18
