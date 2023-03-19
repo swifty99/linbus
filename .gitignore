@@ -8,3 +8,4 @@
 **/__pycache__/**
 
 /local_*
+.DS_Store
