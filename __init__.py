@@ -277,7 +277,7 @@ async def setup_linbus_core_(var, config):
     if CONF_OBSERVER_MODE in config:
         cg.add(var.set_observer_mode(config[CONF_OBSERVER_MODE]))
 
-    for conf in config.get(CONF_ON_FRAME, []):
+"""     for conf in config.get(CONF_ON_FRAME, []):
         lin_id = conf[CONF_LIN_ID]
         trigger = cg.new_Pvariable(
             conf[CONF_TRIGGER_ID], var, lin_id
@@ -290,7 +290,7 @@ async def setup_linbus_core_(var, config):
                 (cg.uint32, "lin_id"),
             ],
             conf,
-        )
+        ) """
 
 
 

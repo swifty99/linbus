@@ -13,12 +13,6 @@ static const char *const TAG = "linbus.LinBus";
 //   this->listeners_heater_.reserve(expected_listener_count);
 // }
 
-void LinBus::update() {
-  // Call listeners in after method 'lin_multiframe_recieved' call.
-  // Because 'lin_multiframe_recieved' is time critical an all these sensors can take some time.
-
-  }
-  LinBusProtocol::update();
 
 // setup() and dump_config() are not overloaded. LinProtocol handles them.
 
@@ -148,8 +142,8 @@ bool LinBus::lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int
 } */
 
 
-// was loop, not sure yet for ling
-void Linbus::update() {
+// was loop, not sure yet for lin
+void LinBus::update() {
   // read all messages until queue is empty
  
   // check if incoming messages are present and
@@ -163,6 +157,8 @@ void Linbus::update() {
         // where does it go? jkjk
       }
     }
+
+  LinBusProtocol::update();
   }
 }  // namespace linbus
 }  // namespace esphome

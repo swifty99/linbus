@@ -6,14 +6,14 @@
 #include <SerialUART.h>
 
 // Instance 1 for UART port 0
-static esphome::linbus_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_1 = nullptr;
+static esphome::linbus::LinBusListener *LIN_BUS_LISTENER_INSTANCE_1 = nullptr;
 // Instance 2 for UART port 1
-static esphome::linbus_inetbox::LinBusListener *LIN_BUS_LISTENER_INSTANCE_2 = nullptr;
+static esphome::linbus::LinBusListener *LIN_BUS_LISTENER_INSTANCE_2 = nullptr;
 
 namespace esphome {
 namespace lin_bus {
 
-static const char *const TAG = "linbus_inetbox.LinBusListener";
+static const char *const TAG = "linbus.LinBusListener";
 
 void LinBusListener::setup_framework() {
   auto uartComp = static_cast<esphome::uart::linbus_RP2040UartComponent *>(this->parent_);

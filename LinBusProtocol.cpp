@@ -4,9 +4,9 @@
 #include "esphome/core/helpers.h"
 
 namespace esphome {
-namespace linbus_inetbox {
+namespace linbus {
 
-static const char *const TAG = "linbus_inetbox.LinBusProtocol";
+static const char *const TAG = "linbus.LinBusProtocol";
 
 #define DIAGNOSTIC_FRAME_MASTER 0x3c
 #define DIAGNOSTIC_FRAME_SLAVE 0x3d
@@ -285,5 +285,5 @@ void LinBusProtocol::lin_msg_diag_multi_() {
   }
 }
 
-}  // namespace linbus_inetbox
+}  // namespace linbus
 }  // namespace esphome

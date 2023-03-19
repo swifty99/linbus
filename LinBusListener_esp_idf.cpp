@@ -8,7 +8,7 @@
 namespace esphome {
 namespace lin_bus {
 
-static const char *const TAG = "linbus_inetbox.LinBusListener";
+static const char *const TAG = "linbus.LinBusListener";
 
 void LinBusListener::setup_framework() {
   // uartSetFastReading

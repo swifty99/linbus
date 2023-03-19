@@ -36,7 +36,7 @@ class LinbusTrigger;
 template<typename... Ts> class LinbusSendAction;
 
 
-// LinBusprotocoll derives from polling component an uart
+// LinBus derives from LinBusProtocol protocoll derives from polling component and uart
 class LinBus : public LinBusProtocol {
  public:
   // slave not yet implementded
@@ -49,9 +49,6 @@ class LinBus : public LinBusProtocol {
   // void setup() override;
   // void dump_config() override;
   
-  float get_setup_priority() const override { return setup_priority::HARDWARE; }
-  
-
   void update() override;
 
   // should not bee needed, polling should be able to handle...
@@ -72,8 +69,8 @@ protected:
   // bool answer_lin_order_(const u_int8_t pid) override;
 
   bool lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) override;
-  const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
-                                          u_int8_t *return_len) override;
+  // const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
+  //                                         u_int8_t *return_len) override;
 
   //bool has_update_to_submit_();
 
