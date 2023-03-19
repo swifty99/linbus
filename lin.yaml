@@ -8,10 +8,7 @@ esphome:
 
 
 external_components:
-  # use all components from a local folder
-  - source:
-      type: local
-      path: components
+  - source: github://swifty99/linbus
 
 
 esp32:

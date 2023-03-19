@@ -10,3 +10,4 @@
 /local_*
 .DS_Store
 linbus.code-workspace
+lin-local.yaml
