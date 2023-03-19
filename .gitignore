@@ -4,6 +4,7 @@
 /.esphome/
 /secrets.yaml
 
+**.DS_Store**
 **/__pycache__/**
 
 /local_*
