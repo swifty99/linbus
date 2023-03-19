@@ -1,0 +1,37 @@
+esphome:
+  name: "lin-test"
+
+  on_boot:
+    then:
+      - delay: 1sec
+      - linbus.send: [ 0x11, 0x22, 0x33 ]
+
+
+external_components:
+  # use all components from a local folder
+  - source:
+      type: local
+      path: components
+
+
+esp32:
+  board: mhetesp32devkit
+  framework:
+    type: arduino
+
+
+uart:
+  - id: lin_uart_bus
+    tx_pin: 17
+    rx_pin: 16
+    baud_rate: 9600
+    data_bits: 8
+    parity: NONE
+    stop_bits: 2
+
+linbus:
+  uart_id: lin_uart_bus
+  cs_pin: 5
+  fault_pin: 18
+  # Advanced users can use `on_heater_message` action. The heater data is in the `message` variable.
+
