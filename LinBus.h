@@ -23,23 +23,6 @@ class LinBus;
 
 
 
-enum class SensorValueType : uint8_t {
-  RAW = 0x00,     // variable length
-  U_WORD = 0x1,   // 1 Register unsigned
-  U_DWORD = 0x2,  // 2 Registers unsigned
-  S_WORD = 0x3,   // 1 Register signed
-  S_DWORD = 0x4,  // 2 Registers signed
-  BIT = 0x5,
-  U_DWORD_R = 0x6,  // 2 Registers unsigned
-  S_DWORD_R = 0x7,  // 2 Registers unsigned
-  U_QWORD = 0x8,
-  S_QWORD = 0x9,
-  U_QWORD_R = 0xA,
-  S_QWORD_R = 0xB,
-  FP32 = 0xC,
-  FP32_R = 0xD
-};
-
 /* struct StatusFrameListener {
   std::function<void(const StatusFrameHeater *)> on_heater_change = nullptr;
   std::function<void(const StatusFrameTimer *)> on_timer_change = nullptr;
@@ -48,19 +31,105 @@ enum class SensorValueType : uint8_t {
 };
  */
 
+
+
+class LinbusTrigger;
+template<typename... Ts> class LinbusSendAction;
+
+/* LIN payload length definitions according to ISO 11898-1 */
+static const uint8_t LIN_MAX_DATA_LENGTH = 8;
+
+/*
+Lin Frame describes a normative LIN Frame
+*/
+struct LinFrame {
+  uint32_t lin_id;           
+  uint8_t data[LIN_MAX_DATA_LENGTH] __attribute__((aligned(8)));
+};
+
+// LinBusprotocoll derives from polling component an uart
 class LinBus : public LinBusProtocol {
  public:
   LinBus(u_int8_t expected_listener_count);
+  
+  //master onlysend:
+  LinBus();
+
+  // These methods are derived from baseclass:
+  // void setup() override;
+  // void dump_config() override;
+  
+  float get_setup_priority() const override { return setup_priority::HARDWARE; }
+  
 
   void update() override;
 
-  const std::array<u_int8_t, 4> lin_identifier() override;
+  // should not bee needed, polling should be able to handle...
+  void loop() override;
+
   void lin_heartbeat() override;
   void lin_reset_device() override;
 
+  void send_data(uint8_t lin_pid, const std::vector<uint8_t> &data);
+
+  void add_trigger(LinbusTrigger *trigger);
 
 protected:
+  template<typename... Ts> friend class LinbusSendAction;
+  std::vector<LinbusTrigger *> triggers_{};
   uint8_t pid_{0x00};
+
+  bool answer_lin_order_(const u_int8_t pid) override;
+
+  bool lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) override;
+  const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
+                                          u_int8_t *return_len) override;
+
+  bool has_update_to_submit_();
+
+template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public Parented<Linbus> {
+ public:
+  void set_data_template(const std::function<std::vector<uint8_t>(Ts...)> func) {
+    this->data_func_ = func;
+    this->static_ = false;
+  }
+  void set_data_static(const std::vector<uint8_t> &data) {
+    this->data_static_ = data;
+    this->static_ = true;
+  }
+
+  void set_lin_id(int8_t lin_pid) { this->pid_ = lin_pid; }
+
+  void play(Ts... x) override {
+    auto lin_pid = this->lin_pid_.has_value() ? *this->lin_pid_ : this->parent_->lin_pid_;
+   if (this->static_) {
+      this->parent_->send_data(lin_pid, this->data_static_);
+    } else {
+      auto val = this->data_func_(x...);
+      this->parent_->send_data(lin_pid, val);
+    }
+  }
+ protected:
+  optional<uint32_t> lin_pid_{};
+  bool static_{false};
+  std::function<std::vector<uint8_t>(Ts...)> data_func_{};
+  std::vector<uint8_t> data_static_{};
+};
+
+
+class LinbusTrigger : public Trigger<std::vector<uint8_t>, uint32_t, bool>, public Component {
+  friend class Linbus;
+
+ public:
+  explicit LinbusTrigger(Linbus *parent, const std::uint32_t lin_id)
+      : parent_(parent), lin_id_(lin_id){};
+
+  void setup() override { this->parent_->add_trigger(this); }
+
+ protected:
+  Linbus *parent_;
+  uint32_t lin_id_;
+};
 
 
 }  // namespace linbus

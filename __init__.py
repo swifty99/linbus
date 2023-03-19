@@ -58,8 +58,6 @@ def validate_raw_data(value):
     )
 
 linbus_ns = cg.esphome_ns.namespace("linbus")
-
-
 LinbusComponent = linbus_ns.class_("LinbusComponent", cg.Component)
 LinbusTrigger = linbus_ns.class_(
     "LinbusTrigger",
@@ -222,7 +220,7 @@ def final_validate_device_schema(
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
-            cv.GenerateID(): cv.declare_id(LinBus),
+            cv.GenerateID(): cv.declare_id(LinbusComponent),
             cv.Optional(CONF_LIN_CHECKSUM, "VERSION_2"): cv.enum(CONF_SUPPORTED_LIN_CHECKSUM, upper=True),
             cv.Optional(CONF_CS_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_FAULT_PIN): pins.gpio_input_pin_schema,
@@ -239,15 +237,16 @@ CONFIG_SCHEMA = cv.All(
     # Polling is for presenting data to sensors.
     # Reading and communication is done in a seperate thread/core.
     .extend(cv.polling_component_schema("500ms"))
+    .extend(cv.COMPONENT_SCHEMA)
     .extend(uart.UART_DEVICE_SCHEMA),
-    .extend(cv.COMPONENT_SCHEMA),
     cv.only_on(["esp32", "rp2040"]),
-)
+) 
+
 FINAL_VALIDATE_SCHEMA = cv.All(
     final_validate_device_schema(
         "linbus", baud_rate=9600, require_tx=True, require_rx=True, stop_bits=2, data_bits=8, parity="NONE", require_hardware_uart=True),
     count_id_usage(CONF_NUMBER_OF_CHILDREN, [
-                   CONF_LINBUS_ID, CONF_ID], LinBus),
+                   CONF_LINBUS_ID, CONF_ID], LinbusComponent),
 )
 
 async def setup_linbus_core_(var, config):
@@ -261,7 +260,7 @@ async def setup_linbus_core_(var, config):
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
 
-    cg.add(var.set_can_id([config[CONF_LIN_ID]]))
+    cg.add(var.set_lin_id([config[CONF_LIN_ID]]))
 
     if CONF_LIN_CHECKSUM in config:
         cg.add(var.set_lin_checksum(
@@ -279,9 +278,9 @@ async def setup_linbus_core_(var, config):
         cg.add(var.set_observer_mode(config[CONF_OBSERVER_MODE]))
 
     for conf in config.get(CONF_ON_FRAME, []):
-        can_id = conf[CONF_LIN_ID]
+        lin_id = conf[CONF_LIN_ID]
         trigger = cg.new_Pvariable(
-            conf[CONF_TRIGGER_ID], var, can_id
+            conf[CONF_TRIGGER_ID], var, lin_id
         )
         await cg.register_component(trigger, conf)
         await automation.build_automation(
@@ -303,6 +302,37 @@ async def register_linbus(var, config):
 # Actions
 
 
-# AUTOMATION
+
+# Actions
+@automation.register_action(
+    "linbus.send",
+    linbus_ns.class_("LinbusSendAction", automation.Action),
+    cv.maybe_simple_value(
+        {
+            cv.GenerateID(CONF_LINBUS_ID): cv.use_id(LinbusComponent),
+            cv.Optional(CONF_LIN_ID): cv.int_range(min=0, max=0x1FFFFFFF),
+            cv.Required(CONF_DATA): cv.templatable(validate_raw_data),
+        },
+        validate_id,
+        key=CONF_DATA,
+    ),
+)
+async def linbus_action_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_LINBUS_ID])
+
+    if CONF_LIN_ID in config:
+        lin_id = await cg.templatable(config[CONF_LIN_ID], args, cg.uint32)
+        cg.add(var.set_lin_id(lin_id))
+
+    data = config[CONF_DATA]
+    if isinstance(data, bytes):
+        data = [int(x) for x in data]
+    if cg.is_template(data):
+        templ = await cg.templatable(data, args, cg.std_vector.template(cg.uint8))
+        cg.add(var.set_data_template(templ))
+    else:
+        cg.add(var.set_data_static(data))
+    return var
 
 
