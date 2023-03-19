@@ -1,7 +1,7 @@
 #pragma once
 
 #include "esphome/core/component.h"
-
+#include "esphome/core/optional.h"
 #include "esphome/core/automation.h"
 
 #include <list>
@@ -14,7 +14,6 @@
 namespace esphome {
 namespace linbus {
 
-class LinBus;
 
 
 #define LIN_SID_RESPONSE 0x40
@@ -60,7 +59,7 @@ class LinBus : public LinBusProtocol {
 
   void lin_heartbeat() override;
   void lin_reset_device() override;
-
+  void add_trigger(LinbusTrigger *trigger);
   void send_data(uint8_t lin_pid, const std::vector<uint8_t> &data);
 
 //  void add_trigger(LinbusTrigger *trigger);
@@ -70,15 +69,17 @@ protected:
   std::vector<LinbusTrigger *> triggers_{};
   uint8_t pid_{0x00};
 
-  bool answer_lin_order_(const u_int8_t pid) override;
+  // bool answer_lin_order_(const u_int8_t pid) override;
 
   bool lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) override;
   const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
                                           u_int8_t *return_len) override;
 
-  bool has_update_to_submit_();
+  //bool has_update_to_submit_();
 
-template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public Parented<Linbus> {
+};
+
+template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public Parented<LinBus> {
  public:
   void set_data_template(const std::function<std::vector<uint8_t>(Ts...)> func) {
     this->data_func_ = func;
@@ -104,14 +105,14 @@ class LinbusTrigger : public Trigger<std::vector<uint8_t>, uint32_t, bool>, publ
   friend class Linbus;
 
  public:
-  explicit LinbusTrigger(Linbus *parent, const std::uint32_t lin_id)
+  explicit LinbusTrigger(LinBus *parent, const std::uint8_t lin_id)
       : parent_(parent), lin_id_(lin_id){};
 
+  //void setup() override { this->add_trigger(this); }
   void setup() override { this->parent_->add_trigger(this); }
 
  protected:
-
-  Linbus *parent_;
+  LinBus *parent_;
   uint32_t lin_id_;
 };
 

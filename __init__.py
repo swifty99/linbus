@@ -29,7 +29,7 @@ from .entity_helpers import count_id_usage
 
 DEPENDENCIES = ["uart"]
 CODEOWNERS = ["@swifty99"]
-IS_PLATFORM_COMPONENT = True
+#IS_PLATFORM_COMPONENT = True
 
 CONF_LIN_ID = "lin_id"
 CONF_LINBUS_ID = "linbus_id"
