@@ -19,22 +19,16 @@ static const char *const TAG = "linbus.LinBusProtocol";
 #define LIN_SID_HEARTBEAT 0xB9
 #define LIN_SID_HEARTBEAT_RESPONSE (LIN_SID_HEARTBEAT | LIN_SID_RESPONSE)
 
-void LinBusProtocol::lin_reset_device(){
-    // clear any messages in send queue of LinBus Protocol handler.
+void LinBusProtocol::lin_reset_device() {
+  // clear any messages in send queue of LinBus Protocol handler.
   while (!this->updates_to_send_.empty()) {
     this->updates_to_send_.pop();
   }
 }
 
-
-bool LinBusProtocol::lin_request_pid(const u_int8_t pid){
-
+bool LinBusProtocol::lin_request_pid(const u_int8_t pid) {
   // return if Bus error, not yet implemented
   // return true if PID could be sent
-
-
-
-
 }
 
 bool LinBusProtocol::answer_lin_order_(const u_int8_t pid) {

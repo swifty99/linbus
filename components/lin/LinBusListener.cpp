@@ -70,8 +70,7 @@ void LinBusListener::setup() {
 
 void LinBusListener::update() { this->check_for_lin_fault_(); }
 
-bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid){
-
+bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid) {
   // this code is probably bad here. it shold be somehow integratd in the listeners
   // this could be out of sync
 
@@ -80,10 +79,10 @@ bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t p
 
   // add PID with checksum
   linframe[2] = pid | (addr_parity(pid) << 6);
-  
+
   // fill databytes
-  for (i = 0; i< len; i++){
-    linframe[i+3]= data[i];
+  for (i = 0; i < len; i++) {
+    linframe[i + 3] = data[i];
   }
 
   // calc CRC
@@ -96,12 +95,10 @@ bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t p
     data_CRC = data_checksum(data, len, pid);
   }
   if (!this->observer_mode_) {
-    this->write_array(linframe, len+3);
+    this->write_array(linframe, len + 3);
     this->write(data_CRC);
-    ESP_LOGV(TAG, "LinTX %02X %s", pid, format_hex_pretty(linframe, len+3).c_str());
-
+    ESP_LOGV(TAG, "LinTX %02X %s", pid, format_hex_pretty(linframe, len + 3).c_str());
   }
-  
 }
 
 void LinBusListener::write_lin_answer_(const u_int8_t *data, u_int8_t len) {
@@ -187,7 +184,6 @@ bool LinBusListener::check_for_lin_fault_() {
 }
 
 bool lin_request_pid_(const u_int8_t pid) {
-  
   this->current_PID_ = pid;
   // prefill the header: break and sync byte
   u_int8_t data[3] = {0x00, 0x55, 0x00};
@@ -236,11 +232,11 @@ void LinBusListener::read_lin_frame_() {
 
       // First is Break expected
       if (!this->read_byte(&buf) || buf != LIN_BREAK) {
-      #ifdef ESPHOME_LOG_HAS_VERY_VERBOSE
+#ifdef ESPHOME_LOG_HAS_VERY_VERBOSE
         log_msg.type = QUEUE_LOG_MSG_TYPE::VV_READ_LIN_FRAME_BREAK_EXPECTED;
         log_msg.current_PID = buf;
         xQueueSendFromISR(this->log_queue_, (void *) &log_msg, QUEUE_WAIT_DONT_BLOCK);
-      #endif  // ESPHOME_LOG_HAS_VERY_VERBOSE
+#endif  // ESPHOME_LOG_HAS_VERY_VERBOSE
       } else {
         // ESP_LOGVV(TAG, "%02X BREAK received.", buf);
         this->current_state_ = READ_STATE_SYNC;

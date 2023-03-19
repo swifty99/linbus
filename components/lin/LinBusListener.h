@@ -1,7 +1,7 @@
 
 /**
  * @brief Connects to UART and answers LIN PID requests on time if available
- * 
+ *
  * bool observer_mode_ could be enabled
  */
 #pragma once
@@ -72,8 +72,6 @@ struct QUEUE_LOG_MSG {
 /* LIN payload length definitions according to ISO 11898-1 */
 static const uint8_t LIN_MAX_DATA_LENGTH = 8;
 
-
-
 class LinBusListener : public PollingComponent, public uart::UARTDevice {
  public:
   float get_setup_priority() const override { return setup_priority::DATA; }
@@ -104,7 +102,7 @@ class LinBusListener : public PollingComponent, public uart::UARTDevice {
 
   bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid);
 
-  virtual bool lin_request_pid_(const u_int8_t pid) ;
+  virtual bool lin_request_pid_(const u_int8_t pid);
   virtual bool answer_lin_order_(const u_int8_t pid) = 0;
   virtual void lin_message_recieved_(const u_int8_t pid, const u_int8_t *message, u_int8_t length) = 0;
 

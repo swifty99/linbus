@@ -15,7 +15,6 @@ class LinBusProtocol : public LinBusListener {
  protected:
   const std::array<u_int8_t, 8> lin_empty_response_ = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-
   bool answer_lin_order_(const u_int8_t pid) override;
   void lin_message_recieved_(const u_int8_t pid, const u_int8_t *message, u_int8_t length) override;
 

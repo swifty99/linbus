@@ -13,7 +13,6 @@ static const char *const TAG = "linbus.LinBus";
 //   this->listeners_heater_.reserve(expected_listener_count);
 // }
 
-
 // setup() and dump_config() are not overloaded. LinProtocol handles them.
 
 const std::array<uint8_t, 4> LinBus::lin_identifier() {
@@ -25,17 +24,14 @@ const std::array<uint8_t, 4> LinBus::lin_identifier() {
 }
 
 void LinBus::send_data(uint8_t lin_pid, const std::vector<uint8_t> &data) {
-
   uint8_t len = static_cast<uint8_t>(data.size());
 
   if (len > LIN_MAX_DATA_LENGTH)
     len = LIN_MAX_DATA_LENGTH;
 
-  //call the protocol to send Data
+  // call the protocol to send Data
   send_lin_pid_withdata_(data, len, lin_pid);
 }
-
-
 
 void LinBus::lin_heartbeat() { this->device_registered_ = micros(); }
 
@@ -45,9 +41,7 @@ void LinBus::lin_reset_device() {
   // this->init_recieved_ = 0;
 
   // this->update_time_ = 0;
-
 }
-
 
 // A listener is needed as slave, truma inet code below, not needed for LIN master:
 // void LinBus::register_listener(const std::function<void(const StatusFrameHeater *)> &func) {
@@ -60,9 +54,7 @@ void LinBus::lin_reset_device() {
 //   }
 // }
 
-
 void LinBus::add_trigger(LinbusTrigger *trigger) {
-
   ESP_LOGVV(TAG, "add trigger for pid=0x%03x", trigger->can_id_);
 
   this->triggers_.push_back(trigger);
@@ -102,10 +94,9 @@ bool LinBus::lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int
     // (*response)[3] = // unknown
     // (*response)[4] = // unknown
     return true;
-  } 
+  }
   return false;
 }
-
 
 // slave functionq
 /* bool LinBus::has_update_to_submit_() {
@@ -141,24 +132,23 @@ bool LinBus::lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int
   return false;
 } */
 
-
 // was loop, not sure yet for lin
 void LinBus::update() {
   // read all messages until queue is empty
- 
+
   // check if incoming messages are present and
 
-  //from receive que jkjk:
+  // from receive que jkjk:
   uint8_t lin_id = 0x11;
-    // fire all triggers
-    for (auto *trigger : this->triggers_) {
-      if (trigger->lin_id_ == lin_id) {
-        trigger->trigger(data, lin_id);
-        // where does it go? jkjk
-      }
+  // fire all triggers
+  for (auto *trigger : this->triggers_) {
+    if (trigger->lin_id_ == lin_id) {
+      trigger->trigger(data, lin_id);
+      // where does it go? jkjk
     }
+  }
 
   LinBusProtocol::update();
-  }
+}
 }  // namespace linbus
 }  // namespace esphome

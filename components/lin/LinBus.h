@@ -14,13 +14,9 @@
 namespace esphome {
 namespace linbus {
 
-
-
 #define LIN_SID_RESPONSE 0x40
 #define LIN_SID_READ_STATE_BUFFER 0xBA
 #define LIN_SID_FIll_STATE_BUFFFER 0xBB
-
-
 
 /* struct StatusFrameListener {
   std::function<void(const StatusFrameHeater *)> on_heater_change = nullptr;
@@ -30,38 +26,35 @@ namespace linbus {
 };
  */
 
-
-
 class LinbusTrigger;
 template<typename... Ts> class LinbusSendAction;
-
 
 // LinBus derives from LinBusProtocol protocoll derives from polling component and uart
 class LinBus : public LinBusProtocol {
  public:
   // slave not yet implementded
   // LinBus(u_int8_t expected_listener_count);
-  
-  //master onlysend:
+
+  // master onlysend:
   LinBus(){};
 
   // These methods are derived from baseclass:
   // void setup() override;
   // void dump_config() override;
-  
+
   void update() override;
 
   // should not bee needed, polling should be able to handle...
-  //void loop() override;
+  // void loop() override;
 
   void lin_heartbeat() override;
   void lin_reset_device() override;
   void add_trigger(LinbusTrigger *trigger);
   void send_data(uint8_t lin_pid, const std::vector<uint8_t> &data);
 
-//  void add_trigger(LinbusTrigger *trigger);
+  //  void add_trigger(LinbusTrigger *trigger);
 
-protected:
+ protected:
   template<typename... Ts> friend class LinbusSendAction;
   std::vector<LinbusTrigger *> triggers_{};
   uint8_t pid_{0x00};
@@ -72,8 +65,7 @@ protected:
   // const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
   //                                         u_int8_t *return_len) override;
 
-  //bool has_update_to_submit_();
-
+  // bool has_update_to_submit_();
 };
 
 template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public Parented<LinBus> {
@@ -89,7 +81,6 @@ template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public P
 
   void set_lin_id(int8_t lin_pid) { this->pid_ = lin_pid; }
 
-
  protected:
   optional<uint8_t> lin_pid_{};
   bool static_{false};
@@ -97,22 +88,19 @@ template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public P
   std::vector<uint8_t> data_static_{};
 };
 
-
 class LinbusTrigger : public Trigger<std::vector<uint8_t>, uint32_t, bool>, public Component {
   friend class Linbus;
 
  public:
-  explicit LinbusTrigger(LinBus *parent, const std::uint8_t lin_id)
-      : parent_(parent), lin_id_(lin_id){};
+  explicit LinbusTrigger(LinBus *parent, const std::uint8_t lin_id) : parent_(parent), lin_id_(lin_id){};
 
-  //void setup() override { this->add_trigger(this); }
+  // void setup() override { this->add_trigger(this); }
   void setup() override { this->parent_->add_trigger(this); }
 
  protected:
   LinBus *parent_;
   uint32_t lin_id_;
 };
-
 
 }  // namespace linbus
 }  // namespace esphome
