@@ -70,9 +70,8 @@ void LinBusListener::setup() {
 
 void LinBusListener::update() { this->check_for_lin_fault_(); }
 
-bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid) {
-  // this code is probably bad here. it shold be somehow integratd in the listeners
-  // this could be out of sync
+bool LinBusListener::send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t pid) {
+
 
   // prefill the header: break and sync byte
   u_int8_t linframe[11] = {0x00, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -94,6 +93,8 @@ bool send_lin_pid_withdata_(const u_int8_t *data, u_int8_t len, const u_int8_t p
     // LIN checksum V2
     data_CRC = data_checksum(data, len, pid);
   }
+
+  // send data
   if (!this->observer_mode_) {
     this->write_array(linframe, len + 3);
     this->write(data_CRC);
@@ -196,6 +197,8 @@ bool lin_request_pid_(const u_int8_t pid) {
 }
 
 void LinBusListener::onReceive_() {
+  // this is called if an UART Evente has been detected.
+  // defined in device specific LINBus Listener
   if (!this->check_for_lin_fault_()) {
     while (this->available()) {
       this->read_lin_frame_();
@@ -367,6 +370,8 @@ void LinBusListener::clear_uart_buffer_() {
 }
 
 void LinBusListener::process_lin_msg_queue_(TickType_t xTicksToWait) {
+  // this is called by RTOS Task as often as possible
+  // defined in device specific LINBus Listener
   QUEUE_LIN_MSG lin_msg;
   while (xQueueReceive(this->lin_msg_queue_, &lin_msg, xTicksToWait) == pdPASS) {
     this->lin_message_recieved_(lin_msg.current_PID, lin_msg.data, lin_msg.len);
