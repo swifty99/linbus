@@ -234,10 +234,11 @@ CONFIG_SCHEMA = cv.All(
         ),
         }
     )
-    # Polling is for presenting data to sensors.
+    # Polling is for presenting LinBus observer data
     # Reading and communication is done in a seperate thread/core.
     .extend(cv.polling_component_schema("500ms"))
-    .extend(cv.COMPONENT_SCHEMA)
+    
+    #.extend(cv.COMPONENT_SCHEMA)
     .extend(uart.UART_DEVICE_SCHEMA),
     cv.only_on(["esp32", "rp2040"]),
 ) 
@@ -277,22 +278,22 @@ async def setup_linbus_core_(var, config):
     if CONF_OBSERVER_MODE in config:
         cg.add(var.set_observer_mode(config[CONF_OBSERVER_MODE]))
 
-"""     for conf in config.get(CONF_ON_FRAME, []):
-        lin_id = conf[CONF_LIN_ID]
+
+    for conf in config.get(CONF_ON_FRAME, []):
+        can_id = conf[CONF_LIN_ID]
         trigger = cg.new_Pvariable(
-            conf[CONF_TRIGGER_ID], var, lin_id
+            conf[CONF_TRIGGER_ID], var, can_id
         )
+
         await cg.register_component(trigger, conf)
         await automation.build_automation(
             trigger,
             [
                 (cg.std_vector.template(cg.uint8), "x"),
-                (cg.uint32, "lin_id"),
+                (cg.uint8, "lin_id"),
             ],
             conf,
-        ) """
-
-
+        )
 
 async def register_linbus(var, config):
     if not CORE.has_id(config[CONF_ID]):

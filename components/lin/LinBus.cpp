@@ -15,17 +15,12 @@ static const char *const TAG = "linbus.LinBus";
 
 // setup() and dump_config() are not overloaded. LinProtocol handles them.
 
-const std::array<uint8_t, 4> LinBus::lin_identifier() {
-  // Supplier Id: 0x4617 - Truma (Phone: +49 (0)89 4617-0)
-  // Unknown:
-  // 17.46.01.03 - Unknown more comms required for init.
-
-  return {0x17 /*Supplied Id*/, 0x46 /*Supplied Id*/, 0x00 /*Function Id*/, 0x1F /*Function Id*/};
-}
 
 void LinBus::send_data(uint8_t lin_pid, const std::vector<uint8_t> &data) {
   uint8_t len = static_cast<uint8_t>(data.size());
 
+  // assuming we are master, different if slave, not implemented yet
+  
   if (len > LIN_MAX_DATA_LENGTH)
     len = LIN_MAX_DATA_LENGTH;
 
@@ -76,27 +71,6 @@ bool LinBus::answer_lin_order_(const u_int8_t pid) {
   return LinBusProtocol::answer_lin_order_(pid);
 }
 
-bool LinBus::lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) {
-  if (identifier == 0x00 /* LIN Product Identification */) {
-    auto lin_identifier = this->lin_identifier();
-    (*response)[0] = lin_identifier[0];
-    (*response)[1] = lin_identifier[1];
-    (*response)[2] = lin_identifier[2];
-    (*response)[3] = lin_identifier[3];
-    (*response)[4] = 0x01;  // Variant
-    return true;
-  } else if (identifier == 0x20 /* Product details to display in CP plus */) {
-    auto lin_identifier = this->lin_identifier();
-    // Only the first three parts are displayed.
-    (*response)[0] = lin_identifier[0];
-    (*response)[1] = lin_identifier[1];
-    (*response)[2] = lin_identifier[2];
-    // (*response)[3] = // unknown
-    // (*response)[4] = // unknown
-    return true;
-  }
-  return false;
-}
 
 // slave functionq
 /* bool LinBus::has_update_to_submit_() {

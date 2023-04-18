@@ -38,7 +38,7 @@ class LinBus : public LinBusProtocol {
   // master onlysend:
   LinBus(){};
 
-  // These methods are derived from baseclass:
+  // These methods are derived from baseclass and found in LinBusListener:
   // void setup() override;
   // void dump_config() override;
 
@@ -61,11 +61,7 @@ class LinBus : public LinBusProtocol {
 
   // bool answer_lin_order_(const u_int8_t pid) override;
 
-  bool lin_read_field_by_identifier_(u_int8_t identifier, std::array<u_int8_t, 5> *response) override;
-  // const u_int8_t *lin_multiframe_recieved(const u_int8_t *message, const u_int8_t message_len,
-  //                                         u_int8_t *return_len) override;
 
-  // bool has_update_to_submit_();
 };
 
 template<typename... Ts> class LinbusSendAction : public Action<Ts...>, public Parented<LinBus> {

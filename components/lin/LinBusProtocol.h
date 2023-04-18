@@ -11,6 +11,8 @@ class LinBusProtocol : public LinBusListener {
   virtual void lin_heartbeat() = 0;
   virtual void lin_reset_device();
   virtual bool lin_request_pid(const u_int8_t pid);
+  virtual bool lin_request_pid(const u_int8_t pid);
+
 
  protected:
   const std::array<u_int8_t, 8> lin_empty_response_ = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
